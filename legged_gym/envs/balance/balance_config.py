@@ -5,7 +5,7 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class BalanceCfg(LeggedRobotCfg):
     class env(LeggedRobotCfg.env):
-        num_envs = 512
+        num_envs = 8192
         '''
         线速度 (1): 只有前进方向(x)的线速度，因为平衡车无法横向移动
         角速度 (2): pitch角速度(倾斜)和yaw角速度(转向)
@@ -39,6 +39,17 @@ class BalanceCfg(LeggedRobotCfg):
         action_scale = 1.0  # 根据车轮大小和电机能力调整
         decimation = 4
 
+    class commands:
+        curriculum = False
+        max_curriculum = 1.
+        num_commands = 3 # default: lin_vel_x, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+        resampling_time = 10. # time before command are changed[s]
+        heading_command = False # if true: compute ang vel command from heading error
+        class ranges:
+            lin_vel_x = [-3.0, 3.0] # min max [m/s]
+            ang_vel_yaw = [-1, 1]    # min max [rad/s]
+            heading = [-3.14, 3.14]
+
     class asset(LeggedRobotCfg.asset):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/balance/urdf/balance.urdf'
         name = "balance"
@@ -55,9 +66,9 @@ class BalanceCfg(LeggedRobotCfg):
         class scales(LeggedRobotCfg.rewards.scales):
             torques = -0.0002
             dof_pos_limits = -10.0
-            orientation = 5.0  # 直立姿态奖励
+            orientation = 10.0  # 直立姿态奖励
             tracking_lin_vel = 2.0  # 前进速度跟踪
-            tracking_ang_vel = 1.5  # yaw角速度跟踪奖励
+            tracking_ang_vel = 1.0  # yaw角速度跟踪奖励
             collision = -5.0  # 增加碰撞惩罚
 
             # 禁用不需要的奖励
@@ -71,4 +82,6 @@ class BalanceCfgPPO( LeggedRobotCfgPPO ):
     class runner( LeggedRobotCfgPPO.runner ):
         run_name = ''
         experiment_name = 'rough_balance'
+
+        max_iterations = 1200 # number of policy updates
   

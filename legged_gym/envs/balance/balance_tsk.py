@@ -8,6 +8,8 @@ from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 from legged_gym.envs.base.legged_robot import LeggedRobot
 
+from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
+
 class Balance(LeggedRobot):
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
@@ -26,8 +28,8 @@ class Balance(LeggedRobot):
         
         # 命令（前进速度和yaw角速度）
         command_lin_vel_x = self.commands[:, 0:1] * self.commands_scale[0:1]  # x方向速度命令
-        command_ang_vel_yaw = self.commands[:, 2:3] * self.commands_scale[2:3]  # yaw角速度命令
-        
+        command_ang_vel_yaw = self.commands[:, 1:2] * self.commands_scale[2:3]  # yaw角速度命令
+
         # 轮子位置和速度
         dof_pos = (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos
         dof_vel = self.dof_vel * self.obs_scales.dof_vel
@@ -106,6 +108,38 @@ class Balance(LeggedRobot):
         
         return noise_vec
     
+    def _resample_commands(self, env_ids):
+        """ 重写命令生成
+
+        Args:
+            env_ids (List[int]): Environments ids for which new commands are needed
+        """
+        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0], self.command_ranges["lin_vel_x"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        if self.cfg.commands.heading_command:
+            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["heading"][0], self.command_ranges["heading"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        else:
+            self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+
+        # set small commands to zero
+        self.commands[env_ids, :1] *= (torch.norm(self.commands[env_ids, :1], dim=1) > 0.05).unsqueeze(1)
+    
+    def _post_physics_step_callback(self):
+        """ Callback called before computing terminations, rewards, and observations
+            Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
+        """
+        # 
+        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt)==0).nonzero(as_tuple=False).flatten()
+        self._resample_commands(env_ids)
+        if self.cfg.commands.heading_command:
+            forward = quat_apply(self.base_quat, self.forward_vec)
+            heading = torch.atan2(forward[:, 1], forward[:, 0])
+            self.commands[:, 1] = torch.clip(0.5*wrap_to_pi(self.commands[:, 2] - heading), -1., 1.)
+
+        if self.cfg.terrain.measure_heights:
+            self.measured_heights = self._get_heights()
+        if self.cfg.domain_rand.push_robots and  (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
+            self._push_robots()
+
     def _reset_dofs(self, env_ids):
         """重写DOF重置方法，给予轻微的随机初始姿态，促进探索"""
         # 对车轮位置进行随机初始化
@@ -157,7 +191,7 @@ class Balance(LeggedRobot):
     def _reward_tracking_ang_vel(self):
         """奖励yaw角速度跟踪，用于平衡车转向控制"""
         # 计算yaw角速度(z轴)的跟踪误差
-        yaw_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        yaw_vel_error = torch.square(self.commands[:, 1] - self.base_ang_vel[:, 2])
         
         # 使用指数形式的奖励函数，误差越小奖励越大
         tracking_reward = torch.exp(-yaw_vel_error / self.cfg.rewards.tracking_sigma)
