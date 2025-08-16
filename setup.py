@@ -3,7 +3,7 @@ from distutils.core import setup
 
 setup(
     name='legged_gym',
-    version='1.0.0',
+    version='1.0.1',
     author='Nikita Rudin',
     license="BSD-3-Clause",
     packages=find_packages(),
