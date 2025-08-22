@@ -31,7 +31,13 @@
 from legged_gym import LEGGED_GYM_ROOT_DIR
 import os
 
-import isaacgym
+try:
+    import isaacgym
+    ISAACGYM_AVAILABLE = True
+except ImportError:
+    ISAACGYM_AVAILABLE = False
+    print("Warning: Isaac Gym not available. Some functionality may be limited.")
+
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 
@@ -108,7 +114,7 @@ class KeyboardController:
         
     def _setup_keyboard_events(self):
         """Setup keyboard event subscriptions"""
-        if self.viewer is None:
+        if self.viewer is None or not ISAACGYM_AVAILABLE:
             return
             
         # Import gymapi here to get key constants
@@ -182,6 +188,10 @@ class KeyboardController:
 
 def sim2sim(args):
     """Main simulation function with keyboard control"""
+    if not ISAACGYM_AVAILABLE:
+        print("Error: Isaac Gym is required to run sim2sim. Please install Isaac Gym first.")
+        return
+        
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
     
     # Override some parameters for testing
@@ -248,5 +258,24 @@ def sim2sim(args):
 
 
 if __name__ == '__main__':
+    # Print usage information
+    print("sim2sim.py - Interactive robot control with keyboard")
+    print("=" * 50)
+    print("This script provides keyboard control for the legged robot simulation.")
+    print()
+    print("Usage:")
+    print("  python sim2sim.py --task=<task_name>")
+    print()
+    print("Controls:")
+    print("  W/S - Forward/Backward movement")
+    print("  A/D - Turn Left/Right")
+    print("  ESC - Quit simulation")
+    print()
+    print("Features:")
+    print("  - Smooth acceleration/deceleration")
+    print("  - Real-time command display")
+    print("  - Configurable movement parameters")
+    print()
+    
     args = get_args()
     sim2sim(args)
