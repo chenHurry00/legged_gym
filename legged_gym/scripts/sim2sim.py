@@ -39,7 +39,7 @@ import torch
 
 
 class cmd:
-    vx = 0.4
+    vx = 1.0
     vy = 0.0
     dyaw = 0.0
 
@@ -149,7 +149,8 @@ def run_mujoco(policy, cfg):
             tau = np.clip(tau, -cfg.robot_config.tau_limit, cfg.robot_config.tau_limit)
 
         # 直接设置扭矩，跳过PD控制
-        data.ctrl = tau
+        if count_lowlevel >= 300:
+            data.ctrl = tau
 
         mujoco.mj_step(model, data)
         viewer.render()
