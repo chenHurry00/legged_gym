@@ -35,7 +35,6 @@ from tqdm import tqdm
 from collections import deque
 from scipy.spatial.transform import Rotation as R
 from legged_gym import LEGGED_GYM_ROOT_DIR
-from legged_gym.envs import BalanceCfg
 import torch
 
 
@@ -101,60 +100,55 @@ def run_mujoco(policy, cfg):
     mujoco.mj_step(model, data)
     viewer = mujoco_viewer.MujocoViewer(model, data)
 
-    target_q = np.zeros((cfg.env.num_actions), dtype=np.double)
+    # 移除PD控制相关变量
+    # target_q = np.zeros((cfg.env.num_actions), dtype=np.double)
     action = np.zeros((cfg.env.num_actions), dtype=np.double)
 
     hist_obs = deque()
     for _ in range(cfg.env.frame_stack):
-        hist_obs.append(np.zeros([1, cfg.env.num_single_obs], dtype=np.double))
+        hist_obs.append(np.zeros([1, cfg.env.num_observations], dtype=np.double))
 
     count_lowlevel = 0
 
-
     for _ in tqdm(range(int(cfg.sim_config.sim_duration / cfg.sim_config.dt)), desc="Simulating..."):
 
-        # Obtain an observation
+        # 获取观测
         q, dq, quat, v, omega, gvec = get_obs(data)
-        q = q[-cfg.env.num_actions:]
-        dq = dq[-cfg.env.num_actions:]
+        wheel_dq = dq[-cfg.env.num_actions:]  # 提取轮子速度
 
         # 1000hz -> 100hz
         if count_lowlevel % cfg.sim_config.decimation == 0:
+            # 创建观测向量 (12维)
+            obs = np.zeros([1, cfg.env.num_observations], dtype=np.float32)
+            # 1. 基础线速度x (1维)
+            obs[0, 0] = v[0] * cfg.normalization.obs_scales.lin_vel
+            # 2. 基础角速度pitch (1维)
+            obs[0, 1] = omega[1] * cfg.normalization.obs_scales.ang_vel
+            # 3. 基础角速度yaw (1维)
+            obs[0, 2] = omega[2] * cfg.normalization.obs_scales.ang_vel
+            # 4. 投影重力 (3维)
+            obs[0, 3:6] = gvec
+            # 5. 命令线速度x (1维)
+            obs[0, 6] = cmd.vx * cfg.normalization.obs_scales.lin_vel
+            # 6. 命令角速度yaw (1维)
+            obs[0, 7] = cmd.dyaw * cfg.normalization.obs_scales.ang_vel
+            # 7. 轮子速度 (2维)
+            obs[0, 8:10] = wheel_dq * cfg.normalization.obs_scales.dof_vel
+            # 8. 上一步动作 (2维)
+            obs[0, 10:12] = action
 
-            obs = np.zeros([1, cfg.env.num_single_obs], dtype=np.float32)
-            eu_ang = quaternion_to_euler_array(quat)
-            eu_ang[eu_ang > math.pi] -= 2 * math.pi
-
-            obs[0, 0] = math.sin(2 * math.pi * count_lowlevel * cfg.sim_config.dt  / 0.64)
-            obs[0, 1] = math.cos(2 * math.pi * count_lowlevel * cfg.sim_config.dt  / 0.64)
-            obs[0, 2] = cmd.vx * cfg.normalization.obs_scales.lin_vel
-            obs[0, 3] = cmd.vy * cfg.normalization.obs_scales.lin_vel
-            obs[0, 4] = cmd.dyaw * cfg.normalization.obs_scales.ang_vel
-            obs[0, 5:17] = q * cfg.normalization.obs_scales.dof_pos
-            obs[0, 17:29] = dq * cfg.normalization.obs_scales.dof_vel
-            obs[0, 29:41] = action
-            obs[0, 41:44] = omega
-            obs[0, 44:47] = eu_ang
-
+            # 应用观测剪裁
             obs = np.clip(obs, -cfg.normalization.clip_observations, cfg.normalization.clip_observations)
-
-            hist_obs.append(obs)
-            hist_obs.popleft()
-
-            policy_input = np.zeros([1, cfg.env.num_observations], dtype=np.float32)
-            for i in range(cfg.env.frame_stack):
-                policy_input[0, i * cfg.env.num_single_obs : (i + 1) * cfg.env.num_single_obs] = hist_obs[i][0, :]
-            action[:] = policy(torch.tensor(policy_input))[0].detach().numpy()
+            # 使用策略获取动作
+            action_tensor = policy(torch.tensor(obs, dtype=torch.float32))
+            action = action_tensor[0].detach().numpy()
             action = np.clip(action, -cfg.normalization.clip_actions, cfg.normalization.clip_actions)
+            # 直接将动作乘以比例因子作为扭矩
+            tau = action * cfg.control.action_scale
+            # 限制扭矩范围
+            tau = np.clip(tau, -cfg.robot_config.tau_limit, cfg.robot_config.tau_limit)
 
-            target_q = action * cfg.control.action_scale
-
-
-        target_dq = np.zeros((cfg.env.num_actions), dtype=np.double)
-        # Generate PD control
-        tau = pd_control(target_q, q, cfg.robot_config.kps,
-                        target_dq, dq, cfg.robot_config.kds)  # Calc torques
-        tau = np.clip(tau, -cfg.robot_config.tau_limit, cfg.robot_config.tau_limit)  # Clamp torques
+        # 直接设置扭矩，跳过PD控制
         data.ctrl = tau
 
         mujoco.mj_step(model, data)
@@ -169,11 +163,33 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Deployment script.')
     parser.add_argument('--load_model', type=str, required=True,
+                        default='/home/yuchen/usetest/RL/legged_gym/logs/rough_balance/exported/policies/policy_1.pt',
                         help='Run to load from.')
-    parser.add_argument('--terrain', action='store_true', help='terrain or plane')
+    parser.add_argument('--terrain', action='store_true',default='plane', help='terrain or plane')
     args = parser.parse_args()
 
-    class Sim2simCfg(XBotLCfg):
+    class Sim2simCfg:
+        class env:
+            num_observations = 12  # 总观测空间维度
+            num_actions = 2  # 左右轮
+            frame_stack = 1  # 不使用帧堆叠
+
+        class normalization:
+            # 定义与训练时一致的归一化参数
+            class obs_scales:
+                lin_vel = 2.0
+                ang_vel = 0.25
+                dof_pos = 1.0
+                dof_vel = 0.05
+                height = 5.0
+
+            clip_observations = 100.0
+            clip_actions = 100.0
+
+        class control:
+            # 控制参数
+            control_type = 'T'  # 直接扭矩控制
+            action_scale = 1.0
 
         class sim_config:
             if args.terrain:
@@ -181,13 +197,13 @@ if __name__ == '__main__':
             else:
                 mujoco_model_path = f'{LEGGED_GYM_ROOT_DIR}/resources/robots/balance/mjcf/balance.xml'
             sim_duration = 60.0
-            dt = 0.001
-            decimation = 10
+            dt = 0.005
+            decimation = 4
 
         class robot_config:
-            kps = np.array([200, 200, 350, 350, 15, 15, 200, 200, 350, 350, 15, 15], dtype=np.double)
-            kds = np.array([10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], dtype=np.double)
-            tau_limit = 200. * np.ones(12, dtype=np.double)
+            # 直接设置扭矩限制
+            tau_limit = 200. * np.ones(2, dtype=np.double)
+
 
     policy = torch.jit.load(args.load_model)
     run_mujoco(policy, Sim2simCfg())
