@@ -18,7 +18,7 @@ class BalanceCfg(LeggedRobotCfg):
         num_observations = 12  # 观测数量
         num_privileged_obs = None
         num_actions = 2  # 两个轮子的控制
-        episode_length_s = 30  # 每个episode的时长(秒)
+        episode_length_s = 20  # 每个episode的时长(秒)
 
     class init_state(LeggedRobotCfg.init_state):
         pos = [0.0, 0.0, 0.225]  # 起始高度
@@ -31,8 +31,11 @@ class BalanceCfg(LeggedRobotCfg):
         }
 
     class terrain( LeggedRobotCfg.terrain ):
-        mesh_type = 'plane'
+        mesh_type = "trimesh"
         measure_heights = False
+        # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
+        terrain_proportions = [0.5, 0.5, 0.0, 0.0, 0.0]
+        slope_treshold = 1.0  # slopes above this threshold will be corrected to vertical surfaces
 
     class control(LeggedRobotCfg.control):
         control_type = 'T'  # 使用扭矩控制
@@ -64,12 +67,12 @@ class BalanceCfg(LeggedRobotCfg):
         only_positive_rewards = False
 
         class scales(LeggedRobotCfg.rewards.scales):
-            torques = -0.0001
-            dof_pos_limits = 0
+            # torques = -0.0001
+            # dof_pos_limits = 0
             orientation = -10.0  # 直立姿态奖励
-            tracking_lin_vel = 2.0  # 前进速度跟踪
+            tracking_lin_vel = 1.0  # 前进速度跟踪
             tracking_ang_vel = 1.0  # yaw角速度跟踪奖励
-            collision = -5.0  # 增加碰撞惩罚
+            # collision = -5.0  # 增加碰撞惩罚
 
             # 禁用不需要的奖励
             base_height = 0.0
@@ -77,11 +80,22 @@ class BalanceCfg(LeggedRobotCfg):
             feet_stumble = 0.0
 
 class BalanceCfgPPO( LeggedRobotCfgPPO ):
-    class algorithm( LeggedRobotCfgPPO.algorithm ):
-        entropy_coef = 0.01
+    class policy:
+        actor_hidden_dims = [64, 32, 16]
+        critic_hidden_dims = [64, 32, 16]
+        activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
+        # only for 'ActorCriticRecurrent':
+        # rnn_type = 'lstm'
+        # rnn_hidden_size = 512
+        # rnn_num_layers = 1
+
     class runner( LeggedRobotCfgPPO.runner ):
         run_name = ''
         experiment_name = 'rough_balance'
-
-        max_iterations = 1500 # number of policy updates
+        max_iterations = 1000 # number of policy updates
+        # # load and resume
+        # resume = True
+        # load_run = -1 # -1 = last run
+        # checkpoint = -1 # -1 = last saved model
+        # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_balance/Aug20_20-43-05_/' # updated from load_run and chkpt
   

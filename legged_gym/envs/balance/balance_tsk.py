@@ -115,7 +115,7 @@ class Balance(LeggedRobot):
             self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
 
         # set small commands to zero
-        self.commands[env_ids, :1] *= (torch.norm(self.commands[env_ids, :1], dim=1) > 0.05).unsqueeze(1)
+        self.commands[env_ids, :1] *= (torch.norm(self.commands[env_ids, :1], dim=1) > 0.1).unsqueeze(1)
     
     def _post_physics_step_callback(self):
         """ Callback called before computing terminations, rewards, and observations
