@@ -31,11 +31,11 @@ class Balance(LeggedRobot):
         command_ang_vel_yaw = self.commands[:, 1:2] * self.commands_scale[2:3]  # yaw角速度命令
 
         # 轮子位置和速度
-        dof_pos = (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos
+        #dof_pos = (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos
         dof_vel = self.dof_vel * self.obs_scales.dof_vel
         
         # 上一步动作
-        actions = self.actions
+        last_actions = self.actions
         
         # 组合所有观测
         self.obs_buf = torch.cat((
@@ -45,9 +45,9 @@ class Balance(LeggedRobot):
             projected_gravity,      # 3
             command_lin_vel_x,      # 1
             command_ang_vel_yaw,    # 1
-            dof_pos,                # 2 (左右轮)
+            #dof_pos,                # 2 (左右轮)
             dof_vel,                # 2 (左右轮)
-            actions                 # 2
+            last_actions                 # 2
         ), dim=-1)
         
         # 添加噪声
@@ -94,11 +94,11 @@ class Balance(LeggedRobot):
         # 命令 - 通常不添加噪声 (索引6-7)
         noise_vec[6:8] = 0.
         # 轮子位置 (索引8-9)
-        noise_vec[8:10] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
+        #noise_vec[8:10] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
         # 轮子速度 (索引10-11)
-        noise_vec[10:12] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[8:10] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
         # 上一步动作 - 通常不添加噪声 (索引12-13)
-        noise_vec[12:14] = 0.
+        noise_vec[10:12] = 0.
         
         return noise_vec
     

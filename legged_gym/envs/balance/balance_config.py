@@ -15,7 +15,7 @@ class BalanceCfg(LeggedRobotCfg):
         轮子速度 (2): 左右轮的速度
         上一步动作 (2): 之前施加的控制动作
         '''
-        num_observations = 14  # 观测数量
+        num_observations = 12  # 观测数量
         num_privileged_obs = None
         num_actions = 2  # 两个轮子的控制
         episode_length_s = 30  # 每个episode的时长(秒)
