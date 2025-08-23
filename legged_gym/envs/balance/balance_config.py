@@ -94,8 +94,8 @@ class BalanceCfgPPO( LeggedRobotCfgPPO ):
         experiment_name = 'rough_balance'
         max_iterations = 1000 # number of policy updates
         # # load and resume
-        # resume = True
-        # load_run = -1 # -1 = last run
-        # checkpoint = -1 # -1 = last saved model
-        # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_balance/Aug20_20-43-05_/' # updated from load_run and chkpt
+        resume = True
+        load_run = 'Aug21_13-09-44_/' # -1 = last run
+        checkpoint = 700 # -1 = last saved model
+        resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_balance/' # updated from load_run and chkpt
   
