@@ -115,6 +115,12 @@
         <headlight ambient="0.4 0.4 0.4"/>
     </visual>
   
+    <sensor>
+      <framequat name="orientation" objtype="site" objname="imu_site"/>
+      <frameangvel name="angular-velocity" objtype="site" objname="imu_site"/>
+      <framelinvel name="linear-velocity" objtype="site" objname="imu_site"/>
+    </sensor>
+  
     <actuator>
       <motor name="FR_hip_joint" joint="FR_hip_joint" gear="1" ctrllimited="true" ctrlrange="-99.37 99.37"/>
       <motor name="FR_thigh_joint" joint="FR_thigh_joint" gear="1" ctrllimited="true" ctrlrange="-99.37 99.37"/>
