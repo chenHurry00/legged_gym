@@ -175,7 +175,8 @@ def get_obs(data):
     v = r.apply(data.qvel[:3], inverse=True).astype(np.double)  # In the base frame
 
     # 从base body获取角速度而不是传感器
-    omega = data.qvel[3:6].astype(np.double)
+    # qvel[3:6]是世界坐标系的角速度，而四足机器人策略通常期望身体坐标系的角速度
+    omega = r.apply(data.qvel[3:6], inverse=True).astype(np.double)
 
     gvec = r.apply(np.array([0., 0., -1.]), inverse=True).astype(np.double)
     return (q, dq, quat, v, omega, gvec)
@@ -254,13 +255,17 @@ def run_mujoco(policy, cfg):
             obs[0, 36:48] = action
 
             # 8. 高度测量 (187维)
-            # 更准确的实现
-            # 8.1 获取机器人基础高度
-            base_height = data.xpos[0, 2]  # 假设机器人基础是第一个body
-            # 8.2 平坦地面
-            heights = np.ones(187) * (-0.4)  # 假设地面比机器人低0.4单位
-            heights = np.clip(base_height - 0.4 - heights, -1, 1) * cfg.normalization.obs_scales.height_measurements
-            # 8.3 填充观测向量
+            # 更准确的实现：模拟平坦地面的高度测量
+            # 获取机器人基础位置
+            base_pos = q[0:3]  # 基础位置 [x, y, z]
+            # 简化的高度测量：假设地面是平的，高度为0
+            # 在实际应用中，应该根据机器人位置和预定义的测量点网格计算高度
+            heights = np.zeros(187, dtype=np.float32)
+            # 机器人相对于地面的高度
+            robot_height = base_pos[2]  # 机器人的z坐标
+            # 根据训练时的归一化参数进行处理，与legged_robot.py中的实现一致
+            heights = np.clip(robot_height - 0.5 - heights, -1, 1) * cfg.normalization.obs_scales.height_measurements
+            # 填充观测向量
             obs[0, 48:235] = heights
 
             # 应用观测剪裁
