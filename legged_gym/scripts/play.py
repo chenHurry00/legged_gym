@@ -28,15 +28,15 @@
 #
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
-from legged_gym import LEGGED_GYM_ROOT_DIR
 import os
 
 import isaacgym
-from legged_gym.envs import *
-from legged_gym.utils import  get_args, export_policy_as_jit, task_registry, Logger
-
 import numpy as np
 import torch
+from legged_gym.envs import *
+from legged_gym.utils import get_args, export_policy_as_jit, task_registry, Logger
+
+from legged_gym import LEGGED_GYM_ROOT_DIR
 
 
 def play(args):
@@ -59,6 +59,7 @@ def play(args):
 
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
+    #print(env.dof_names)
     obs = env.get_observations()
     # load policy
     train_cfg.runner.resume = True

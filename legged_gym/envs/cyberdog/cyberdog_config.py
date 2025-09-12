@@ -19,20 +19,18 @@ class CyberdogRoughCfg( LeggedRobotCfg ):
     class init_state( LeggedRobotCfg.init_state ):
         pos = [0.0, 0.0, 0.40] # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
-            'FL_hip_joint': 0.0,   # [rad]
-            'RL_hip_joint': 0.0,   # [rad]
-            'FR_hip_joint': -0.0 ,  # [rad]
-            'RR_hip_joint': -0.0,   # [rad]
-
-            'FL_thigh_joint': 0.8,     # [rad]
-            'RL_thigh_joint': 1.0,   # [rad]
-            'FR_thigh_joint': 0.8,     # [rad]
-            'RR_thigh_joint': 1.0,   # [rad]
-
-            'FL_calf_joint': -1.5,   # [rad]
-            'RL_calf_joint': -1.5,    # [rad]
-            'FR_calf_joint': -1.5,  # [rad]
-            'RR_calf_joint': -1.5,    # [rad]
+            'FL_hip_joint': 0.0,
+            'FL_thigh_joint': 0.8,
+            'FL_calf_joint': -1.5,
+            'FR_hip_joint': -0.0,
+            'FR_thigh_joint': 0.8,
+            'FR_calf_joint': -1.5,
+            'RL_hip_joint': 0.0,
+            'RL_thigh_joint': 1.0,
+            'RL_calf_joint': -1.5,
+            'RR_hip_joint': -0.0,
+            'RR_thigh_joint': 1.0,
+            'RR_calf_joint': -1.5,
         }
 
     class control( LeggedRobotCfg.control ):
@@ -110,7 +108,7 @@ class CyberdogFlatCfgPPO( CyberdogRoughCfgPPO ):
     class runner( CyberdogRoughCfgPPO.runner ):
         run_name = 'flat'
         experiment_name = 'flat_cyberdog'
-        max_iterations = 300
+        max_iterations = 500
 
 ########################################梅花桩########################################
 

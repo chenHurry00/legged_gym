@@ -266,7 +266,7 @@ def run_mujoco(policy, cfg):
             # 根据训练时的归一化参数进行处理，与legged_robot.py中的实现一致
             heights = np.clip(robot_height - 0.5 - heights, -1, 1) * cfg.normalization.obs_scales.height_measurements
             # 填充观测向量
-            obs[0, 48:235] = heights
+            # obs[0, 48:235] = heights
 
             # 应用观测剪裁
             obs = np.clip(obs, -cfg.normalization.clip_observations, cfg.normalization.clip_observations)
@@ -301,7 +301,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Deployment script.')
     parser.add_argument('--load_model', type=str, required=False,
-                        default='/home/yuchen/usetest/RL/cyberdog_gym/legged_gym/legged_gym/logs/rough_cyberdog/exported/policies/policy_1.pt',
+                        default='/home/yuchen/usetest/RL/cyberdog_gym/legged_gym/legged_gym/logs/flat_cyberdog/exported/policies/policy_1.pt',
                         help='Run to load from.')
     parser.add_argument('--terrain', action='store_true', default='plane', help='terrain or plane')
     args = parser.parse_args()
@@ -309,7 +309,7 @@ if __name__ == '__main__':
 
     class Sim2simCfg:
         class env:
-            num_observations = 235  # 总观测空间维度 (3+3+3+3+12+12+12+187)
+            num_observations = 48  # 总观测空间维度 (3+3+3+3+12+12+12+187)
             num_actions = 12  # 12个关节
             frame_stack = 1  # 不使用帧堆叠
 
@@ -335,19 +335,20 @@ if __name__ == '__main__':
         class init_state:
             # 默认关节角度，与cyberdog_config.py中一致
             # 按照XML中关节的顺序排列
+            # 代码里读取到的关节顺序和URDF定义的关节顺序不同，需要结合dof_names的输出校正xml定义的顺序
             default_joint_angles = {
-                'FR_hip_joint': -0.0,
-                'FR_thigh_joint': 0.8,
-                'FR_calf_joint': -1.5,
                 'FL_hip_joint': 0.0,
                 'FL_thigh_joint': 0.8,
                 'FL_calf_joint': -1.5,
-                'RR_hip_joint': -0.0,
-                'RR_thigh_joint': 1.0,
-                'RR_calf_joint': -1.5,
+                'FR_hip_joint': -0.0,
+                'FR_thigh_joint': 0.8,
+                'FR_calf_joint': -1.5,
                 'RL_hip_joint': 0.0,
                 'RL_thigh_joint': 1.0,
                 'RL_calf_joint': -1.5,
+                'RR_hip_joint': -0.0,
+                'RR_thigh_joint': 1.0,
+                'RR_calf_joint': -1.5,
             }
 
         class sim_config:
