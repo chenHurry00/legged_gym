@@ -2,7 +2,7 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class Cyberdog2RoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env ):
-        num_envs = 4096
+        num_envs = 2048
         # num_observations = 363 # 观测空间的维度
     
     class terrain( LeggedRobotCfg.terrain ):
@@ -20,18 +20,16 @@ class Cyberdog2RoughCfg( LeggedRobotCfg ):
         pos = [0.0, 0.0, 0.30] # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
             'FL_hip_joint': 0.0,   # [rad]
-            'RL_hip_joint': 0.0,   # [rad]
+            'FL_thigh_joint': 0.66,  # [rad]
+            'FL_calf_joint': -1.17,  # [rad]
             'FR_hip_joint': -0.0 ,  # [rad]
-            'RR_hip_joint': -0.0,   # [rad]
-
-            'FL_thigh_joint': 0.66,     # [rad]
-            'RL_thigh_joint': 0.66,   # [rad]
-            'FR_thigh_joint': 0.66,     # [rad]
-            'RR_thigh_joint': 0.66,   # [rad]
-
-            'FL_calf_joint': -1.17,   # [rad]
-            'RL_calf_joint': -1.17,    # [rad]
+            'FR_thigh_joint': 0.66,  # [rad]
             'FR_calf_joint': -1.17,  # [rad]
+            'RL_hip_joint': 0.0,  # [rad]
+            'RL_thigh_joint': 0.66,  # [rad]
+            'RL_calf_joint': -1.17,  # [rad]
+            'RR_hip_joint': -0.0,   # [rad]
+            'RR_thigh_joint': 0.66,   # [rad]
             'RR_calf_joint': -1.17,    # [rad]
         }
 
@@ -50,7 +48,7 @@ class Cyberdog2RoughCfg( LeggedRobotCfg ):
         name = "cyberdog2"
         foot_name = "foot"
         penalize_contacts_on = ["thigh", "calf"]
-        terminate_after_contacts_on = ["base"]
+        terminate_after_contacts_on = ["trunk", "hip"]
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
         # flip_visual_attachments = False
 
@@ -87,12 +85,17 @@ class Cyberdog2RoughCfgPPO( LeggedRobotCfgPPO ):
         run_name = 'rough'
         experiment_name = 'rough_cyberdog2'
         max_iterations = 1500
+        # # load and resume
+        # resume = True
+        # load_run = 'Sep05_20-32-35_cyber1/' # -1 = last run
+        # checkpoint = -1 # -1 = last saved model
+        # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_cyberdog/' # updated from load_run and chkpt
 
 ########################################平地########################################
 
 class Cyberdog2FlatCfg( Cyberdog2RoughCfg ):
     class env( Cyberdog2RoughCfg.env ):
-        num_envs = 4096
+        num_envs = 2048
         num_observations = 48
   
     class terrain( Cyberdog2RoughCfg.terrain ):
@@ -106,7 +109,7 @@ class Cyberdog2FlatCfgPPO( Cyberdog2RoughCfgPPO ):
     class runner( Cyberdog2RoughCfgPPO.runner ):
         run_name = 'flat'
         experiment_name = 'flat_cyberdog2'
-        max_iterations = 500
+        max_iterations = 300
 
 ########################################梅花桩########################################
 

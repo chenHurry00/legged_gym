@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
@@ -266,7 +266,7 @@ def run_mujoco(policy, cfg):
             # 根据训练时的归一化参数进行处理，与legged_robot.py中的实现一致
             heights = np.clip(robot_height - 0.5 - heights, -1, 1) * cfg.normalization.obs_scales.height_measurements
             # 填充观测向量
-            obs[0, 48:235] = heights
+            # obs[0, 48:235] = heights
 
             # 应用观测剪裁
             obs = np.clip(obs, -cfg.normalization.clip_observations, cfg.normalization.clip_observations)
@@ -301,7 +301,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Deployment script.')
     parser.add_argument('--load_model', type=str, required=False,
-                        default='/home/yuchen/usetest/RL/cyberdog_gym/legged_gym/legged_gym/logs/rough_cyberdog2/exported/policies/policy_1.pt',
+                        default='/home/yuchen/usetest/RL/cyberdog_gym/legged_gym/legged_gym/logs/flat_cyberdog2/exported/policies/policy_1.pt',
                         help='Run to load from.')
     parser.add_argument('--terrain', action='store_true', default='plane', help='terrain or plane')
     args = parser.parse_args()
@@ -309,7 +309,7 @@ if __name__ == '__main__':
 
     class Sim2simCfg:
         class env:
-            num_observations = 235  # 总观测空间维度 (3+3+3+3+12+12+12+187)
+            num_observations = 48  # 总观测空间维度 (3+3+3+3+12+12+12+187)
             num_actions = 12  # 12个关节
             frame_stack = 1  # 不使用帧堆叠
 
@@ -329,26 +329,25 @@ if __name__ == '__main__':
             # PD控制参数
             control_type = 'P'  # 位置控制去
             stiffness = {'joint': 20.}  # [N*m/rad]
-            damping = {'joint': 0.5}  # [N*m*s/rad]
+            damping = {'joint': 0.1}  # [N*m*s/rad]
             action_scale = 0.25
 
         class init_state:
             # 默认关节角度，与cyberdog_config.py中一致
             # 按照XML中关节的顺序排列
+            # 代码里读取到的关节顺序和URDF定义的关节顺序不同，需要结合dof_names的输出校正xml定义的顺序
             default_joint_angles = {
                 'FL_hip_joint': 0.0,  # [rad]
-                'RL_hip_joint': 0.0,  # [rad]
-                'FR_hip_joint': -0.0,  # [rad]
-                'RR_hip_joint': -0.0,  # [rad]
-
                 'FL_thigh_joint': 0.66,  # [rad]
-                'RL_thigh_joint': 0.66,  # [rad]
-                'FR_thigh_joint': 0.66,  # [rad]
-                'RR_thigh_joint': 0.66,  # [rad]
-
                 'FL_calf_joint': -1.17,  # [rad]
-                'RL_calf_joint': -1.17,  # [rad]
+                'FR_hip_joint': -0.0,  # [rad]
+                'FR_thigh_joint': 0.66,  # [rad]
                 'FR_calf_joint': -1.17,  # [rad]
+                'RL_hip_joint': 0.0,  # [rad]
+                'RL_thigh_joint': 0.66,  # [rad]
+                'RL_calf_joint': -1.17,  # [rad]
+                'RR_hip_joint': -0.0,  # [rad]
+                'RR_thigh_joint': 0.66,  # [rad]
                 'RR_calf_joint': -1.17,  # [rad]
             }
 
