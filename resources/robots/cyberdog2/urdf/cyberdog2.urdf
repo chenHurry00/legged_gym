@@ -358,6 +358,10 @@
         </contact>
       </surface>
     </collision>
+    <inertial>
+        <mass value="0.25"/>
+        <inertia ixx="0.00317174097" ixy="2.63048e-06" ixz="6.815581e-05" iyy="0.00317174092" iyz="6.815583e-05" izz="8.319196e-05"/>
+    </inertial>
   </link>
   <transmission name="FL_abad_tran">
     <type>transmission_interface/SimpleTransmission</type>
@@ -567,6 +571,10 @@
         </contact>
       </surface>
     </collision>
+    <inertial>
+        <mass value="0.25"/>
+        <inertia ixx="0.00317174097" ixy="2.63048e-06" ixz="6.815581e-05" iyy="0.00317174092" iyz="6.815583e-05" izz="8.319196e-05"/>
+    </inertial>
   </link>
   <transmission name="FR_abad_tran">
     <type>transmission_interface/SimpleTransmission</type>
@@ -776,6 +784,10 @@
         </contact>
       </surface>
     </collision>
+    <inertial>
+        <mass value="0.25"/>
+        <inertia ixx="0.00317174097" ixy="2.63048e-06" ixz="6.815581e-05" iyy="0.00317174092" iyz="6.815583e-05" izz="8.319196e-05"/>
+    </inertial>
   </link>
   <transmission name="RL_abad_tran">
     <type>transmission_interface/SimpleTransmission</type>
@@ -985,6 +997,10 @@
         </contact>
       </surface>
     </collision>
+    <inertial>
+        <mass value="0.25"/>
+        <inertia ixx="0.00317174097" ixy="2.63048e-06" ixz="6.815581e-05" iyy="0.00317174092" iyz="6.815583e-05" izz="8.319196e-05"/>
+    </inertial>
   </link>
   <transmission name="RR_abad_tran">
     <type>transmission_interface/SimpleTransmission</type>
