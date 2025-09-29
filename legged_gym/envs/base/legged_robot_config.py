@@ -32,8 +32,9 @@ from .base_config import BaseConfig
 
 class LeggedRobotCfg(BaseConfig):
     class env: # 环境参数
+        num_legs = 4
         num_envs = 4096 # 同时训练的环境数量，headless模式下4096大概占用8G显存
-        num_observations = 235 # 观测空间的维度
+        num_observations = 235 + 6 # 观测空间的维度 + 步态优化
         num_privileged_obs = None # 特权观测的数量 if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         num_actions = 12 # 动作空间的维度，表示每个时间步的动作向量的维度
         env_spacing = 3.  # 环境之间的间隔距离 not used with heightfields/trimeshes 
@@ -127,6 +128,16 @@ class LeggedRobotCfg(BaseConfig):
         push_interval_s = 15 # 推力之间的时间间隔
         max_push_vel_xy = 1. # 推力的最大xy平面速度
 
+    class gait:
+        num_gait_params = 4
+        resampling_time = 5  # 重采样时间
+
+        class ranges:
+            frequencies = [1.5, 2.5]  # 步频范围
+            offsets = [0, 1]  # 相位偏移范围
+            durations = [0.5, 0.5]  # 支撑相占比
+            swing_height = [0.0, 0.1]  # 摆动高度
+
     class rewards:
         class scales: # 奖励函数中各项的权重
             termination = -0.0 # 终止奖励
@@ -144,6 +155,9 @@ class LeggedRobotCfg(BaseConfig):
             feet_stumble = -0.0 # 脚部失控惩罚
             action_rate = -0.01 # 动作速率惩罚
             stand_still = -0. # 静止惩罚
+            # 步态相关奖励
+            tracking_contacts_shaped_force = -2
+            tracking_contacts_shaped_vel = -2
 
         only_positive_rewards = True # 将负总奖励截断为零。当设置为True时，如果总奖励为负值，将将其截断为零。这可以防止过早终止训练问题，并确保模型能够学习到积极的奖励信号。如果任务的目标是最大化正奖励，可以将此参数设置为True。 if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25 # 跟踪奖励中的高斯标准差。跟踪奖励用于衡量机器人与目标值之间的距离或误差。通过指定高斯标准差来调整跟踪奖励的衰减速度。较小的标准差值将使跟踪奖励对误差更为敏感，较大的标准差值将使跟踪奖励对误差更为宽容。 tracking reward = exp(-error^2/sigma)
@@ -152,6 +166,10 @@ class LeggedRobotCfg(BaseConfig):
         soft_torque_limit = 1. # 关节扭矩限制的软约束，超过该限制将被惩罚
         base_height_target = 1. # 基座高度的目标值
         max_contact_force = 100. # 接触力的最大值，超过该限制将被惩罚 forces above this value are penalized
+        # 步态奖励参数
+        kappa_gait_probs = 0.05 # Von Mises平滑参数
+        gait_force_sigma = 25.0
+        gait_vel_sigma = 0.25
 
     class normalization:
         class obs_scales: # 观测值归一化的比例尺

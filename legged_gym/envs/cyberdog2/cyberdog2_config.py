@@ -96,7 +96,7 @@ class Cyberdog2RoughCfgPPO( LeggedRobotCfgPPO ):
 class Cyberdog2FlatCfg( Cyberdog2RoughCfg ):
     class env( Cyberdog2RoughCfg.env ):
         num_envs = 2048
-        num_observations = 48
+        num_observations = 48 + 6
   
     class terrain( Cyberdog2RoughCfg.terrain ):
         mesh_type = 'plane'
@@ -109,7 +109,7 @@ class Cyberdog2FlatCfgPPO( Cyberdog2RoughCfgPPO ):
     class runner( Cyberdog2RoughCfgPPO.runner ):
         run_name = 'flat'
         experiment_name = 'flat_cyberdog2'
-        max_iterations = 300
+        max_iterations = 500
 
 ########################################梅花桩########################################
 

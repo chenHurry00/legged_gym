@@ -57,6 +57,7 @@ class BaseTask():
         if self.headless == True:
             self.graphics_device_id = -1
 
+        self.num_legs = cfg.env.num_legs
         self.num_envs = cfg.env.num_envs
         self.num_obs = cfg.env.num_observations
         self.num_privileged_obs = cfg.env.num_privileged_obs
