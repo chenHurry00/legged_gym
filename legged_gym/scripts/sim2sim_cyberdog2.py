@@ -223,6 +223,16 @@ def run_mujoco(policy, cfg):
 
     count_lowlevel = 0
 
+    # 步态固定参数
+    gaits = [0. for _ in range(4)]
+    gaits[0] = 2.5  # Frequency
+    gaits[1] = 0.05  # Offset
+    gaits[2] = 0.5  # Duration
+    gaits[3] = 0.02  # Swing height
+    gait_indices = np.remainder(
+        cfg.sim_config.dt * gaits[0], 1.0
+    )
+
     for _ in tqdm(range(int(cfg.sim_config.sim_duration / cfg.sim_config.dt)), desc="Simulating..."):
         # Update GLFW events to process keyboard input
         glfw.poll_events()
@@ -231,6 +241,17 @@ def run_mujoco(policy, cfg):
         q, dq, quat, v, omega, gvec = get_obs(data)
         joint_q = q[7:]  # 提取关节位置 (前7个是base的自由度)
         joint_dq = dq[6:]  # 提取关节速度 (前6个是base的速度)
+
+        frequencies = gaits[0]
+        offsets = gaits[1]
+        durations = gaits[2]
+        # 更新步态相位
+        gait_indices = np.remainder(
+            gait_indices + cfg.sim_config.dt * frequencies, 1.0
+        )
+        # 生成时钟信号
+        clock_inputs_sin = np.sin(2 * np.pi * gait_indices)
+        clock_inputs_cos = np.cos(2 * np.pi * gait_indices)
 
         # 1000hz -> 100hz
         if count_lowlevel % cfg.sim_config.decimation == 0:
@@ -267,6 +288,11 @@ def run_mujoco(policy, cfg):
             heights = np.clip(robot_height - 0.5 - heights, -1, 1) * cfg.normalization.obs_scales.height_measurements
             # 填充观测向量
             # obs[0, 48:235] = heights
+            # Clock inputs (sin, cos: 1D each)
+            obs[0, 48] = clock_inputs_sin
+            obs[0, 49] = clock_inputs_cos
+            # Gait parameters (4D)
+            obs[0, 50:54] = gaits
 
             # 应用观测剪裁
             obs = np.clip(obs, -cfg.normalization.clip_observations, cfg.normalization.clip_observations)
@@ -309,9 +335,9 @@ if __name__ == '__main__':
 
     class Sim2simCfg:
         class env:
-            num_observations = 48  # 总观测空间维度 (3+3+3+3+12+12+12+187)
+            num_observations = 48 + 6 # 总观测空间维度 (3+3+3+3+12+12+12+187)
             num_actions = 12  # 12个关节
-            frame_stack = 1  # 不使用帧堆叠
+            frame_stack = 2  # 不使用帧堆叠
 
         class normalization:
             # 定义与训练时一致的归一化参数
@@ -328,7 +354,7 @@ if __name__ == '__main__':
         class control:
             # PD控制参数
             control_type = 'P'  # 位置控制去
-            stiffness = {'joint': 20.}  # [N*m/rad]
+            stiffness = {'joint': 18.}  # [N*m/rad]
             damping = {'joint': 0.1}  # [N*m*s/rad]
             action_scale = 0.25
 
