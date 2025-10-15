@@ -42,13 +42,16 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
     # override some parameters for testing
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 20)
-    env_cfg.terrain.num_rows = 10
-    env_cfg.terrain.num_cols = 1
-    env_cfg.terrain.curriculum = True
+    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 30)
+    env_cfg.terrain.num_rows = 5
+    env_cfg.terrain.num_cols = 5
+    env_cfg.terrain.curriculum = True  # 关闭课程学习
+    env_cfg.terrain.max_init_terrain_level = 2  # 使用给定的复杂度的地形级别
     env_cfg.noise.add_noise = False
     env_cfg.domain_rand.randomize_friction = False
     env_cfg.domain_rand.push_robots = False
+    # 修改地形类型比例，增加适中复杂地形的比重
+    env_cfg.terrain.terrain_proportions = [0.2, 0.2, 0.2, 0.2, 0.2]  # [smooth slope, rough slope, stairs up, stairs down, discrete]
 
     env_cfg.sim.physx.max_gpu_contact_pairs = 2**23 # Prevent GPU memory from exceeding
     # env_cfg.commands.ranges.lin_vel_x = [1.5, 1.5] # min max [m/s]
