@@ -85,11 +85,11 @@ class Cyberdog2RoughCfgPPO( LeggedRobotCfgPPO ):
         run_name = 'rough'
         experiment_name = 'rough_cyberdog2'
         max_iterations = 1500
-        # # load and resume
+        # # load and resume, has load problem if not use resume
         # resume = True
-        # load_run = 'Sep05_20-32-35_cyber1/' # -1 = last run
-        # checkpoint = -1 # -1 = last saved model
-        # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_cyberdog/' # updated from load_run and chkpt
+        # load_run = 'Oct14_22-48-40_rough/' # -1 = last run
+        # checkpoint = 1500 # -1 = last saved model
+        # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_cyberdog2/' # updated from load_run and chkpt
 
 ########################################平地########################################
 
