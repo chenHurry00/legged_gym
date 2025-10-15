@@ -34,8 +34,8 @@ class LeggedRobotCfg(BaseConfig):
     class env: # 环境参数
         num_legs = 4
         num_envs = 4096 # 同时训练的环境数量，headless模式下4096大概占用8G显存
-        num_observations = 235 + 6 # 观测空间的维度 + 步态优化
-        num_privileged_obs = None # 特权观测的数量 if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
+        num_observations = 45 + 6 # 观测空间的维度45 + 步态优化6
+        num_privileged_obs = num_observations + 3 + 187 # 特权观测的数量, 机体速度3 + 高度 if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 12 # 动作空间的维度，表示每个时间步的动作向量的维度
         env_spacing = 3.  # 环境之间的间隔距离 not used with heightfields/trimeshes 
         send_timeouts = True # 当训练环境的步骤超过指定的时间限制时，算法可以接收到超时信号 send time out information to the algorithm
