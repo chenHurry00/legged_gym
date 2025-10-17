@@ -127,6 +127,18 @@ class LeggedRobotCfg(BaseConfig):
         push_robots = True # 是否对机器人施加推力
         push_interval_s = 15 # 推力之间的时间间隔
         max_push_vel_xy = 1. # 推力的最大xy平面速度
+        
+        # 随机初始状态参数
+        randomize_start_pos = True      # 随机化初始位置
+        start_pos_range = [-0.5, 0.5]   # 初始位置随机范围 (x, y)
+        randomize_start_height = True   # 随机化初始高度
+        start_height_range = [0.35, 0.5] # 初始高度随机范围 (z)
+        randomize_start_rot = True      # 随机化初始姿态
+        start_rot_range = [-3.14, 3.14]   # 初始姿态随机范围 (roll, pitch)
+        randomize_start_lin_vel = True  # 随机化初始线速度
+        start_lin_vel_range = [-0.1, 0.1] # 初始线速度随机范围
+        randomize_start_ang_vel = True  # 随机化初始角速度
+        start_ang_vel_range = [-0.2, 0.2] # 初始角速度随机范围
 
     class gait:
         num_gait_params = 4

@@ -453,8 +453,90 @@ class LeggedRobot(BaseTask):
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
-        # base velocities
+            
+            # 添加随机初始位置
+            if self.cfg.domain_rand.randomize_start_pos:
+                rand_xy = torch_rand_float(
+                    self.cfg.domain_rand.start_pos_range[0],
+                    self.cfg.domain_rand.start_pos_range[1],
+                    (len(env_ids), 2),
+                    device=self.device
+                )
+                self.root_states[env_ids, :2] += rand_xy
+            
+            # 添加随机初始高度
+            if self.cfg.domain_rand.randomize_start_height:
+                rand_z = torch_rand_float(
+                    self.cfg.domain_rand.start_height_range[0],
+                    self.cfg.domain_rand.start_height_range[1],
+                    (len(env_ids), 1),
+                    device=self.device
+                )
+                self.root_states[env_ids, 2:3] = rand_z  # 直接设置高度而非添加偏移
+    
+        # 添加随机初始姿态
+        if self.cfg.domain_rand.randomize_start_rot:
+            rand_roll = torch_rand_float(
+                self.cfg.domain_rand.start_rot_range[0],
+                self.cfg.domain_rand.start_rot_range[1],
+                (len(env_ids), 1),
+                device=self.device
+            )
+            rand_pitch = torch_rand_float(
+                self.cfg.domain_rand.start_rot_range[0],
+                self.cfg.domain_rand.start_rot_range[1],
+                (len(env_ids), 1),
+                device=self.device
+            )
+            
+            # 计算四元数分量，保证单位长度
+            # 对于小角度扰动，使用完整公式而非近似
+            cos_roll = torch.cos(rand_roll / 2.0)
+            sin_roll = torch.sin(rand_roll / 2.0)
+            cos_pitch = torch.cos(rand_pitch / 2.0)
+            sin_pitch = torch.sin(rand_pitch / 2.0)
+            
+            # roll-only四元数: [sin(roll/2), 0, 0, cos(roll/2)]
+            # pitch-only四元数: [0, sin(pitch/2), 0, cos(pitch/2)]
+            # 组合四元数: q_roll * q_pitch
+            # q = [x, y, z, w]
+            qw = cos_roll * cos_pitch  # w分量
+            qx = sin_roll * cos_pitch  # x分量
+            qy = cos_roll * sin_pitch  # y分量
+            qz = -sin_roll * sin_pitch  # z分量
+            
+            self.root_states[env_ids, 3] = qx.squeeze(1)  # x (roll component)
+            self.root_states[env_ids, 4] = qy.squeeze(1)  # y (pitch component)
+            self.root_states[env_ids, 5] = qz.squeeze(1)  # z (yaw component)
+            self.root_states[env_ids, 6] = qw.squeeze(1)  # w component
+            
+            # 归一化四元数以确保单位长度
+            quat_norm = torch.norm(self.root_states[env_ids, 3:7], dim=1, keepdim=True)
+            self.root_states[env_ids, 3:7] /= quat_norm
+
+        # base velocities: standard randomization
         self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device) # [7:10]: lin vel, [10:13]: ang vel
+        
+        # 添加随机初始线速度
+        if self.cfg.domain_rand.randomize_start_lin_vel:
+            rand_lin_vel = torch_rand_float(
+                self.cfg.domain_rand.start_lin_vel_range[0],
+                self.cfg.domain_rand.start_lin_vel_range[1],
+                (len(env_ids), 3),
+                device=self.device
+            )
+            self.root_states[env_ids, 7:10] = rand_lin_vel
+        
+        # 添加随机初始角速度
+        if self.cfg.domain_rand.randomize_start_ang_vel:
+            rand_ang_vel = torch_rand_float(
+                self.cfg.domain_rand.start_ang_vel_range[0],
+                self.cfg.domain_rand.start_ang_vel_range[1],
+                (len(env_ids), 3),
+                device=self.device
+            )
+            self.root_states[env_ids, 10:13] = rand_ang_vel
+
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_states),
@@ -976,7 +1058,11 @@ class LeggedRobot(BaseTask):
     
     def _reward_orientation(self):
         # Penalize non flat base orientation
-        return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
+        # 原始惩罚：惩罚x-y平面内的倾斜
+        xy_penalty = torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
+        # 新增惩罚：惩罚z轴方向偏离正常状态 (正常时z应为-1，底朝天时z为+1)
+        z_penalty = torch.square(1 + self.projected_gravity[:, 2])  # 当z=-1时为0，z=1时为4
+        return xy_penalty + z_penalty
 
     def _reward_base_height(self):
         # Penalize base height away from target
