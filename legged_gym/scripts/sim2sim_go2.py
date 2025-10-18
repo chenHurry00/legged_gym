@@ -359,9 +359,12 @@ if __name__ == '__main__':
         class control:
             # PD控制参数
             control_type = 'P'  # 位置控制去
-            stiffness = {'joint': 22.}  # [N*m/rad]
-            damping = {'joint': 0.3}  # [N*m*s/rad]
-            action_scale = 0.25
+            stiffness = {'joint': 20.}  # [N*m/rad]
+            damping = {'joint': 0.4}  # [N*m*s/rad]
+            action_scale = [0.125, 0.25, 0.25,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
+                            0.125, 0.25, 0.25,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
+                            0.125, 0.25, 0.25,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
+                            0.125, 0.25, 0.25]  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
 
         class init_state:
             # 默认关节角度，与cyberdog_config.py中一致

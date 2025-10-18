@@ -1080,7 +1080,7 @@ class LeggedRobot(BaseTask):
         xy_penalty = torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
         # 新增惩罚：惩罚z轴方向偏离正常状态 (正常时z应为-1，底朝天时z为+1)
         z_penalty = torch.square(1 + self.projected_gravity[:, 2])  # 当z=-1时为0，z=1时为4
-        return xy_penalty + z_penalty
+        return xy_penalty + 3 * z_penalty
 
     def _reward_base_height(self):
         # Penalize base height away from target

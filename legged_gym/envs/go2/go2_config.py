@@ -42,7 +42,10 @@ class Go2RoughCfg( LeggedRobotCfg ):
         stiffness = {'joint': 20.0}  # [N*m/rad]
         damping = {'joint': 0.5}     # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
-        action_scale = 0.25
+        action_scale = [0.125, 0.25, 0.25,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
+                        0.125, 0.25, 0.25,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
+                        0.125, 0.25, 0.25,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
+                        0.125, 0.25, 0.25] # RR_hip_joint, RR_thigh_joint, RR_calf_joint
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
 
@@ -50,7 +53,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go2/urdf/go2.urdf'
         name = "go2"
         foot_name = "foot"
-        penalize_contacts_on = ["thigh", "calf"]
+        penalize_contacts_on = ["thigh", "calf", "base"]
         terminate_after_contacts_on = [ ] # Cancel for training stability
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
         # flip_visual_attachments = False
@@ -66,6 +69,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         base_height_target = 0.25
         soft_dof_pos_limit = 0.9
         class scales( LeggedRobotCfg.rewards.scales ):
+            orientation = -0.1
             torques = -0.0002
             feet_air_time =  1.5
             base_height = -0.5
