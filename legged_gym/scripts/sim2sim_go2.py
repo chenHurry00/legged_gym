@@ -300,7 +300,14 @@ def run_mujoco(policy, cfg):
             action = np.clip(action, -cfg.normalization.clip_actions, cfg.normalization.clip_actions)
 
             # 计算目标关节位置
-            target_q = action * cfg.control.action_scale + default_joint_pos
+            # 处理标量或向量形式的 action_scale
+            if isinstance(cfg.control.action_scale, (int, float)):
+                # 标量形式
+                target_q = action * cfg.control.action_scale + default_joint_pos
+            else:
+                # 向量形式 - 将 action_scale 转换为数组并与 action 相乘
+                action_scale_array = np.array(cfg.control.action_scale)
+                target_q = action * action_scale_array + default_joint_pos
 
         # PD控制计算扭矩
         tau = pd_control(target_q, joint_q, kp, np.zeros_like(joint_dq), joint_dq, kd)

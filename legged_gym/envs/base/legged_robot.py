@@ -411,7 +411,16 @@ class LeggedRobot(BaseTask):
             [torch.Tensor]: Torques sent to the simulation
         """
         #pd controller
-        actions_scaled = actions * self.cfg.control.action_scale
+        # 处理标量或向量形式的 action_scale
+        if isinstance(self.cfg.control.action_scale, (int, float)):
+            # 标量形式
+            actions_scaled = actions * self.cfg.control.action_scale
+        else:
+            # 向量形式 - 将 action_scale 转换为张量并与 actions 相乘
+            action_scale_tensor = torch.tensor(self.cfg.control.action_scale, 
+                                              dtype=actions.dtype, 
+                                              device=actions.device)
+            actions_scaled = actions * action_scale_tensor
         control_type = self.cfg.control.control_type
         if control_type=="P":
             torques = self.p_gains*(actions_scaled + self.default_dof_pos - self.dof_pos) - self.d_gains*self.dof_vel
