@@ -72,6 +72,7 @@ class LeggedRobotCfg(BaseConfig):
         num_commands = 4 # 命令的数量 default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # 命令更改之前的时间间隔 time before command are changed[s]
         heading_command = True # 是否使用航向命令.如果设置为True，将根据航向误差重新计算角速度命令，以控制机器人的朝向。 if true: compute ang vel command from heading error
+        zero_command_probability = 0.5  # 将所有命令设置为0的概率，用于后期定向训练稳定性
         class ranges:
             lin_vel_x = [-1.0, 1.0] # min max [m/s]
             lin_vel_y = [-1.0, 1.0]   # min max [m/s]

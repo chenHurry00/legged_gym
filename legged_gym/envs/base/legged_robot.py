@@ -398,6 +398,15 @@ class LeggedRobot(BaseTask):
 
         # set small commands to zero
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        
+        # 以一定概率将运动命令设置为0
+        zero_mask = torch.rand(len(env_ids), device=self.device) < self.cfg.commands.zero_command_probability
+        if torch.any(zero_mask):  # 只有当有需要设为零的环境时才执行
+            self.commands[env_ids[zero_mask], 0:2] = 0.0  # 将x、y方向速度设为0
+            if self.cfg.commands.heading_command:
+                self.commands[env_ids[zero_mask], 3] = 0.0  # 将航向角设为0
+            else:
+                self.commands[env_ids[zero_mask], 2] = 0.0  # 将偏航角速度设为0
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
