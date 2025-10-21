@@ -168,6 +168,7 @@ class LeggedRobotCfg(BaseConfig):
             feet_stumble = -0.0 # 脚部失控惩罚
             action_rate = -0.01 # 动作速率惩罚
             stand_still = -0. # 静止惩罚
+            shift = -0.2 #静止命令下的位移惩罚
             # 步态相关奖励
             tracking_contacts_shaped_force = -2
             tracking_contacts_shaped_vel = -2

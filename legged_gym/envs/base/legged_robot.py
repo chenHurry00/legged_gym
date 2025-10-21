@@ -182,6 +182,9 @@ class LeggedRobot(BaseTask):
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)
 
+        # 更新重置环境的初始位置
+        self.initial_positions[env_ids] = self.root_states[env_ids, :2]
+
         self._resample_commands(env_ids)
 
         # reset buffers
@@ -669,6 +672,8 @@ class LeggedRobot(BaseTask):
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        # 初始化位置缓冲区，用于计算静止命令下的位移
+        self.initial_positions = self.root_states[:, :2].clone()  # 记录episode开始时的初始位置 (x, y)
         if self.cfg.terrain.measure_heights:
             self.height_points = self._init_height_points()
         self.measured_heights = 0
@@ -1203,3 +1208,30 @@ class LeggedRobot(BaseTask):
                 reward += desired_contact[:, i] * (
                     1 - torch.exp(-foot_velocities[:, i] ** 2 / self.cfg.rewards.gait_vel_sigma))
         return reward / len(self.feet_indices)
+
+    def _reward_shift(self):
+        """
+        奖励/惩罚函数，用于惩罚当xy命令为0时出现的xy位移
+        当机器人被命令保持静止时，如果发生了位移则给予惩罚
+        """
+        # 获取当前机器人的位置（x, y）
+        current_pos = self.root_states[:, :2]  # 当前的x, y位置
+        
+        # 检查是否有任何xy命令为0（或接近0）
+        command_xy_norm = torch.norm(self.commands[:, :2], dim=1)  # 命令向量的模长
+        
+        # 定义静止命令的阈值，低于此值认为是静止命令
+        zero_command_threshold = 0.01  # 可以根据需要调整
+        
+        # 找出命令为零（或接近零）
+        zero_command_mask = command_xy_norm < zero_command_threshold
+        
+        # 计算每个机器人相对于其episode开始时的初始位置的位移
+        distance_from_initial = torch.norm(current_pos - self.initial_positions, dim=1)
+        
+        # 仅对命令为零的机器人计算偏移惩罚，其他机器人惩罚为0
+        reward = torch.zeros_like(distance_from_initial)
+        reward[zero_command_mask] = distance_from_initial[zero_command_mask]
+        
+        # 应用惩罚，距离越远惩罚越大（负值）
+        return reward
