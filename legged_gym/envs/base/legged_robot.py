@@ -656,8 +656,8 @@ class LeggedRobot(BaseTask):
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat((self.num_envs, 1))
         self.forward_vec = to_torch([1., 0., 0.], device=self.device).repeat((self.num_envs, 1))
         self.torques = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-        self.p_gains = torch.zeros(self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-        self.d_gains = torch.zeros(self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        self.p_gains = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        self.d_gains = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_dof_vel = torch.zeros_like(self.dof_vel)
@@ -682,12 +682,23 @@ class LeggedRobot(BaseTask):
             found = False
             for dof_name in self.cfg.control.stiffness.keys():
                 if dof_name in name:
-                    self.p_gains[i] = self.cfg.control.stiffness[dof_name]
-                    self.d_gains[i] = self.cfg.control.damping[dof_name]
+                    # 为每个环境添加噪声到p_gains
+                    base_p_gain = self.cfg.control.stiffness[dof_name]
+                    p_gain_noise = (torch_rand_float(1.0 - self.cfg.noise.noise_scales.p_gains, 
+                                                     1.0 + self.cfg.noise.noise_scales.p_gains, 
+                                                     (self.num_envs, 1), device=self.device).squeeze(1))
+                    self.p_gains[:, i] = base_p_gain * p_gain_noise
+                    
+                    # 为每个环境添加噪声到d_gains
+                    base_d_gain = self.cfg.control.damping[dof_name]
+                    d_gain_noise = (torch_rand_float(1.0 - self.cfg.noise.noise_scales.d_gains,
+                                                     1.0 + self.cfg.noise.noise_scales.d_gains,
+                                                     (self.num_envs, 1), device=self.device).squeeze(1))
+                    self.d_gains[:, i] = base_d_gain * d_gain_noise
                     found = True
             if not found:
-                self.p_gains[i] = 0.
-                self.d_gains[i] = 0.
+                self.p_gains[:, i] = 0.
+                self.d_gains[:, i] = 0.
                 if self.cfg.control.control_type in ["P", "V"]:
                     print(f"PD gain of joint {name} were not defined, setting them to zero")
         self.default_dof_pos = self.default_dof_pos.unsqueeze(0)

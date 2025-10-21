@@ -204,6 +204,8 @@ class LeggedRobotCfg(BaseConfig):
             ang_vel = 0.2
             gravity = 0.05
             height_measurements = 0.1
+            p_gains = 0.1
+            d_gains = 0.02
 
     # viewer camera:
     class viewer:
