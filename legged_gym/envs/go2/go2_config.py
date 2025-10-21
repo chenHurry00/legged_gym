@@ -58,7 +58,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
         # flip_visual_attachments = False
 
-    class gait:
+    class gait( LeggedRobotCfg.gait):
         class ranges:
             frequencies = [1.5, 2.5]  # 步频范围
             offsets = [0, 1]  # 相位偏移范围
