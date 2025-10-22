@@ -2,14 +2,14 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class Go2RoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env ):
-        num_envs = 2048
+        num_envs = 4096
         # num_observations = 363 # 观测空间的维度
     
     class terrain( LeggedRobotCfg.terrain ):
         mesh_type = 'trimesh'
         border_size = 15 # [m] 边界大小
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete, flat]
-        terrain_proportions = [0.1, 0.1, 0.3, 0.3, 0.2]
+        terrain_proportions = [0.2, 0.1, 0.2, 0.2, 0.3]
         # terrain_proportions = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0] # 上楼梯
         num_rows = 10 # number of terrain rows (levels)
         num_cols = 10 # number of terrain cols (types)
@@ -19,19 +19,19 @@ class Go2RoughCfg( LeggedRobotCfg ):
     class init_state( LeggedRobotCfg.init_state ):
         pos = [0.0, 0.0, 0.42] # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
-            'FL_hip_joint': 0.1,   # [rad]
+            'FL_hip_joint': 0.0,   # [rad]
             'FL_thigh_joint': 0.8,  # [rad]
             'FL_calf_joint': -1.5,  # [rad]
 
-            'FR_hip_joint': -0.1,  # [rad]
+            'FR_hip_joint': -0.0,  # [rad]
             'FR_thigh_joint': 0.8,  # [rad]
             'FR_calf_joint': -1.5,  # [rad]
 
-            'RL_hip_joint': 0.1,   # [rad]
+            'RL_hip_joint': 0.0,   # [rad]
             'RL_thigh_joint': 1.,  # [rad]
             'RL_calf_joint': -1.5,  # [rad]
 
-            'RR_hip_joint': -0.1,   # [rad]
+            'RR_hip_joint': -0.0,   # [rad]
             'RR_thigh_joint': 1.,   # [rad]
             'RR_calf_joint': -1.5,    # [rad]
         }
@@ -66,26 +66,26 @@ class Go2RoughCfg( LeggedRobotCfg ):
             swing_height = [0.0, 0.1]  # 摆动高度
 
     class rewards( LeggedRobotCfg.rewards ):
-        base_height_target = 0.25
+        base_height_target = 0.34
         soft_dof_pos_limit = 0.9
         class scales( LeggedRobotCfg.rewards.scales ):
-            orientation = -0.1
+            orientation = -1.0
             torques = -0.0002
             feet_air_time =  1.5
             base_height = -0.5
             tracking_lin_vel = 2.0
             tracking_ang_vel = 1.5
-            stand_still = -2.0
+            stand_still = -0.0
             lin_vel_z = -2.0
             dof_pos_limits = -10.0
 
     class commands( LeggedRobotCfg.commands ):
-        curriculum = False
-        resampling_time = 4.
+        curriculum = True
+        resampling_time = 10.
         class ranges( LeggedRobotCfg.commands.ranges ):
-            lin_vel_x = [-1.0, 1.0] # min max [m/s]
-            lin_vel_y = [-0.5, 0.5]   # min max [m/s]
-            ang_vel_yaw = [-0.5, 0.5]    # min max [rad/s]
+            lin_vel_x = [-2.0, 2.0] # min max [m/s]
+            lin_vel_y = [-0.8, 0.8]   # min max [m/s]
+            ang_vel_yaw = [-1.5, 1.5]    # min max [rad/s]
             heading = [-3.14, 3.14]
 
 class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
