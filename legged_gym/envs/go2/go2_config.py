@@ -1,4 +1,91 @@
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
+from legged_gym.envs.base.bio_legged_robot_config import BioLeggedRobotCfg
+
+class BioGo2RoughCfg( BioLeggedRobotCfg ):
+    class env( BioLeggedRobotCfg.env ):
+        num_observations = 49
+        num_envs = 4096
+
+    class terrain( BioLeggedRobotCfg.terrain ):
+        mesh_type = 'trimesh'
+        border_size = 15 # [m] 边界大小
+        # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete, flat]
+        terrain_proportions = [0.1, 0.1, 0.3, 0.2, 0.0, 0.3]
+        # terrain_proportions = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0] # 上楼梯
+        num_rows = 10 # number of terrain rows (levels)
+        num_cols = 10 # number of terrain cols (types)
+        # measured_points_x = [-1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] # 测量点的x位置 1.4mx2.0m rectangle (without center line)
+        # measured_points_y = [-0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7] # 测量点的y位置
+
+    class init_state( BioLeggedRobotCfg.init_state ):
+        pos = [0.0, 0.0, 0.42] # x,y,z [m]
+        default_joint_angles = { # = target angles [rad] when action = 0.0
+            'FL_hip_joint': 0.0,   # [rad]
+            'FL_thigh_joint': 0.8,  # [rad]
+            'FL_calf_joint': -1.5,  # [rad]
+
+            'FR_hip_joint': -0.0,  # [rad]
+            'FR_thigh_joint': 0.8,  # [rad]
+            'FR_calf_joint': -1.5,  # [rad]
+
+            'RL_hip_joint': 0.0,   # [rad]
+            'RL_thigh_joint': 1.,  # [rad]
+            'RL_calf_joint': -1.5,  # [rad]
+
+            'RR_hip_joint': -0.0,   # [rad]
+            'RR_thigh_joint': 1.,   # [rad]
+            'RR_calf_joint': -1.5,    # [rad]
+        }
+
+    class control( BioLeggedRobotCfg.control ):
+        # PD Drive parameters:
+        control_type = 'P'
+        stiffness = {'joint': 20.0}  # [N*m/rad]
+        damping = {'joint': 0.5}     # [N*m*s/rad]
+        # action scale: target angle = actionScale * action + defaultAngle
+        action_scale = [0.125, 0.25, 0.25,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
+                        0.125, 0.25, 0.25,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
+                        0.125, 0.25, 0.25,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
+                        0.125, 0.25, 0.25] # RR_hip_joint, RR_thigh_joint, RR_calf_joint
+        # decimation: Number of control action updates @ sim DT per policy DT
+        decimation = 4
+
+    class asset( BioLeggedRobotCfg.asset ):
+        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go2/urdf/go2.urdf'
+        name = "go2"
+        foot_name = "foot"
+        penalize_contacts_on = ["thigh", "calf", "base"]
+        terminate_after_contacts_on = [ ] # Cancel for training stability
+        self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
+
+    class rewards( LeggedRobotCfg.rewards ):
+        base_height_target = 0.34
+        soft_dof_pos_limit = 0.9
+        class scales( LeggedRobotCfg.rewards.scales ):
+            orientation = -1.0
+            torques = -0.0002
+            feet_air_time =  1.5
+            base_height = -50.0
+            tracking_lin_vel = 2.0 # todo: add punish for moving during zero cmd
+            tracking_ang_vel = 1.5
+            stand_still = -0.0
+            lin_vel_z = -2.0
+            dof_pos_limits = -10.0
+
+    class domain_rand( LeggedRobotCfg.domain_rand ):
+        friction_range = [0.3, 2.0]
+        push_interval_s = 8
+        randomize_base_mass = True
+        added_mass_range = [-0.8, 1.2]
+
+    class commands( LeggedRobotCfg.commands ):
+        curriculum = True
+        resampling_time = 10.
+        class ranges( LeggedRobotCfg.commands.ranges ):
+            lin_vel_x = [-2.0, 2.0] # min max [m/s]
+            lin_vel_y = [-0.8, 0.8]   # min max [m/s]
+            ang_vel_yaw = [-1.5, 1.5]    # min max [rad/s]
+            heading = [-3.14, 3.14]
 
 class Go2RoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env ):
@@ -112,6 +199,12 @@ class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
         # load_run = 'Oct23_11-18-21_rough/' # -1 = last run
         # checkpoint = 500 # -1 = last saved model
         # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_cyberdog2/' # updated from load_run and chkpt
+
+class BioGo2RoughCfgPPO( Go2RoughCfgPPO ):
+    class runner( LeggedRobotCfgPPO.runner ):
+        run_name = 'rough'
+        experiment_name = 'rough_Go2_bio'
+        max_iterations = 3000
 
 ########################################平地########################################
 
