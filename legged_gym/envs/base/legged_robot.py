@@ -500,6 +500,17 @@ class LeggedRobot(BaseTask):
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
+        # Shape: (num_envs, num_bodies, 13)
+        # Each body include：
+        # [0:3]  pos
+        # [3:7]  rot (quat)
+        # [7:10] lin_vel
+        # [10:13] ang_vel
+        rigid_body_state = self.gym.acquire_rigid_body_state_tensor(self.sim)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+        self.rigid_body_states = gymtorch.wrap_tensor(rigid_body_state).view(self.cfg.env.num_envs, -1, 13)
+        print(self.rigid_body_states.shape)
+
         # create some wrapper tensors for different slices
         self.root_states = gymtorch.wrap_tensor(actor_root_state)
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
@@ -668,6 +679,14 @@ class LeggedRobot(BaseTask):
         termination_contact_names = []
         for name in self.cfg.asset.terminate_after_contacts_on:
             termination_contact_names.extend([s for s in body_names if name in s])
+
+        # Body&Dof names
+        print("\nTotal bodies:", self.num_bodies)
+        for i, name in enumerate(body_names):
+            print(f"{i:2d}: {name}")
+        print("\nTotal Dofs:", self.num_dofs)
+        for i, name in enumerate(self.dof_names):
+            print(f"{i:2d}: {name}")
 
         base_init_state_list = self.cfg.init_state.pos + self.cfg.init_state.rot + self.cfg.init_state.lin_vel + self.cfg.init_state.ang_vel
         self.base_init_state = to_torch(base_init_state_list, device=self.device, requires_grad=False)
