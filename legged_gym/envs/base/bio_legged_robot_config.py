@@ -56,6 +56,8 @@ class BioLeggedRobotCfg(LeggedRobotCfg):
             fatigue_penalty = -0.0  # 当能量小于一定阈值时的重罚（软终止）
 
             # 3CC
-            muscle_fatigue = -100.0
+            penalty_3cc_sum = -5.0  # 惩罚总疲劳
+            penalty_3cc_max = -20.0  # 严厉惩罚最大疲劳 (引导负载均衡)
+            penalty_3cc_var = -10.0  # 惩罚疲劳值方差
 
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)

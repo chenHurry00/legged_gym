@@ -235,6 +235,7 @@ class BioLeggedRobot(LeggedRobot):
             self.actions,
             self.muscle_states[..., 2] # <--- 3CC疲劳值
             #normalized_energy  # <--- 疲劳驱动
+            self.muscle_states[..., 2], # <--- 3CC疲劳值
         ), dim=-1)
 
     def reset_idx(self, env_ids):
@@ -262,20 +263,23 @@ class BioLeggedRobot(LeggedRobot):
 
     def _reward_muscle_fatigue(self):
         # 提取疲劳态 MF
+    def _reward_penalty_3cc_max(self):
         fatigue = self.muscle_states[..., 2]  # (num_envs, num_dofs)
-
-        # 1. 总疲劳惩罚 (Minimizing Energy/Total Fatigue)
-        sum_fatigue = torch.sum(fatigue, dim=1)
-
-        # 2. 最大疲劳惩罚 (Minimizing Max Activation - Comfort Hypothesis)
-        # 这正是解决非对称负载的关键
         max_fatigue = torch.max(fatigue, dim=1).values
 
+        return max_fatigue
+
+    def _reward_penalty_3cc_sum(self):
+        fatigue = self.muscle_states[..., 2]  # (num_envs, num_dofs)
+        sum_fatigue = torch.sum(fatigue, dim=1)
+
+        return sum_fatigue
+
+    def _reward_penalty_3cc_var(self):
+        fatigue = self.muscle_states[..., 2]  # (num_envs, num_dofs)
         var_fatigue = torch.var(fatigue, dim=1, unbiased=False)
 
-        return (self.cfg.fatigue.penalty_scale_sum * sum_fatigue) + \
-            (self.cfg.fatigue.penalty_scale_max * max_fatigue) + \
-            (self.cfg.fatigue.penalty_scale_var * var_fatigue)
+        return var_fatigue
 
     def _reward_efficiency(self):
         # 目标：最大化单位功率的速度 (Velocity per Watt)

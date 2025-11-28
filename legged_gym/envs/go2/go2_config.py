@@ -72,7 +72,9 @@ class BioGo2RoughCfg( BioLeggedRobotCfg ):
             lin_vel_z = -2.0
             dof_pos_limits = -10.0
 
-            muscle_fatigue = -100.0
+            penalty_3cc_sum = -0.0  # 惩罚总疲劳
+            penalty_3cc_max = -20.0  # 严厉惩罚最大疲劳 (引导负载均衡)
+            penalty_3cc_var = -10.0  # 惩罚疲劳值方差
 
         only_positive_rewards = True
 
