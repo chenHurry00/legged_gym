@@ -42,6 +42,13 @@ class BioLeggedRobot(LeggedRobot):
             dtype=torch.float
         )
 
+        # === 3CC初始化 ===
+
+        self.muscle_states = torch.zeros(self.num_envs, self.num_dofs, 3,
+                                         dtype=torch.float, device=self.device, requires_grad=False)
+        # 初始化：全部处于静息态 (MR=1.0, MA=0, MF=0)
+        self.muscle_states[..., 0] = 1.0
+
 
     def _update_bio_energetics(self):
         """
@@ -138,20 +145,73 @@ class BioLeggedRobot(LeggedRobot):
         else:
             raise NameError(f"Unknown controller type: {control_type}")
 
-        # --- 新增逻辑：疲劳驱动的动态力矩限制 ---
+        # --- 疲劳驱动的动态力矩限制 ---
 
         # self.fatigue_factor 形状是 (num_envs, 1)
         # torques 形状是 (num_envs, num_dofs)
         # 使用 expand_as 进行广播
-        current_scale = self.fatigue_factor.expand_as(torques)
+        ###current_scale = self.fatigue_factor.expand_as(torques)
 
         # 计算当前的动态最大力矩
         # self.torque_limits 是物理设定的电机绝对最大值
-        dynamic_limits = self.torque_limits * current_scale
+        ###dynamic_limits = self.torque_limits * current_scale
 
         # 硬截断 (Clamping)
         # 这模拟了电池电压下降或电机过热保护导致的输出能力下降
-        torques = torch.clamp(torques, -dynamic_limits, dynamic_limits)
+        ###torques = torch.clamp(torques, -dynamic_limits, dynamic_limits)
+
+        # --- 3CC 疲劳模型嵌入 ---
+        if self.cfg.fatigue.enable:
+            # A. 计算目标负载 (Target Load, TL)
+            # 将力矩归一化到 ，假设 max_torque 对应 100% MVC
+            torque_limits = self.torque_limits.unsqueeze(0)  # (1,12)
+            target_load = torch.abs(torques) / torque_limits  # (N,12)
+            target_load = torch.clamp(target_load, 0.0, 1.0)
+
+            # B. 提取当前状态
+            MR = self.muscle_states[..., 0]
+            MA = self.muscle_states[..., 1]
+            MF = self.muscle_states[..., 2]
+
+            # C. 确定控制器 C(t) - 驱动 MR 流向 MA
+            # 简单的比例控制：试图让 MA 追上 TL
+            # 增益 k_recruit 决定了肌肉响应速度，如果不希望建模激活延迟，可设大一些
+            k_recruit = 10.0
+            recruitment_flow = k_recruit * (target_load - MA)
+
+            # D. 确定恢复率 R_eff
+            # 如果目标负载极低，认为在休息，启用 r 参数
+            is_resting = target_load < 0.1
+            R_eff = torch.where(is_resting,
+                                self.cfg.fatigue.R * self.cfg.fatigue.r,
+                                self.cfg.fatigue.R)
+
+            # E. 微分方程求解 (Euler Integration)
+            # dMA = C(t) - F*MA
+            dMA = recruitment_flow - (self.cfg.fatigue.F * MA)
+
+            # dMF = F*MA - R*eff*MF
+            dMF = (self.cfg.fatigue.F * MA) - (R_eff * MF)
+
+            # dMR = -C(t) + R_eff*MF
+            dMR = -recruitment_flow + (R_eff * MF)
+
+            # F. 更新状态
+            dt = self.sim_params.dt
+            MR_new = MR + dMR * dt
+            MA_new = MA + dMA * dt
+            MF_new = MF + dMF * dt
+
+            # G. 归一化与裁剪 (防止数值漂移)
+            total = MR_new + MA_new + MF_new
+            self.muscle_states[..., 0] = torch.clamp(MR_new / total, 0, 1)
+            self.muscle_states[..., 1] = torch.clamp(MA_new / total, 0, 1)
+            self.muscle_states[..., 2] = torch.clamp(MF_new / total, 0, 1)
+
+            # (可选) H. 性能限制：如果 MF 过高，是否强制削减力矩？
+            # 用户想法："判断自身能输出的力矩"。
+            # 可以乘以此系数模拟肌肉力竭： scale = 1.0 - MF
+            torques = torques * (1.0 - self.muscle_states[..., 2])
 
         return torques
 
@@ -161,7 +221,7 @@ class BioLeggedRobot(LeggedRobot):
 
         # 归一化能量状态 (0.0 - 1.0)
         # 使用 1.0 代表满电，0.0 代表耗尽，这对神经网络更友好
-        normalized_energy = self.energy_tank / self.cfg.bio_energetics.w_prime_capacity
+        normalized_energy = self.energy_tank / self.cfg.bio_energetics.w_prime_capacity + 0.001
 
         # 将能量状态拼接到观测张量末尾
         # 注意：必须确保 cfg.env.num_observations 已相应增加
@@ -173,7 +233,8 @@ class BioLeggedRobot(LeggedRobot):
             (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
             self.dof_vel * self.obs_scales.dof_vel,
             self.actions,
-            normalized_energy  # <--- 新增维度
+            self.muscle_states[..., 2] # <--- 3CC疲劳值
+            #normalized_energy  # <--- 疲劳驱动
         ), dim=-1)
 
     def reset_idx(self, env_ids):
@@ -194,6 +255,27 @@ class BioLeggedRobot(LeggedRobot):
 
             self.energy_tank[env_ids] = rand_levels * self.cfg.bio_energetics.w_prime_capacity
 
+        # 重置3CC参数
+        self.muscle_states[..., 0] = 1.0
+        self.muscle_states[..., 1] = 0.0
+        self.muscle_states[..., 2] = 0.0
+
+    def _reward_muscle_fatigue(self):
+        # 提取疲劳态 MF
+        fatigue = self.muscle_states[..., 2]  # (num_envs, num_dofs)
+
+        # 1. 总疲劳惩罚 (Minimizing Energy/Total Fatigue)
+        sum_fatigue = torch.sum(fatigue, dim=1)
+
+        # 2. 最大疲劳惩罚 (Minimizing Max Activation - Comfort Hypothesis)
+        # 这正是解决非对称负载的关键
+        max_fatigue = torch.max(fatigue, dim=1).values
+
+        var_fatigue = torch.var(fatigue, dim=1, unbiased=False)
+
+        return (self.cfg.fatigue.penalty_scale_sum * sum_fatigue) + \
+            (self.cfg.fatigue.penalty_scale_max * max_fatigue) + \
+            (self.cfg.fatigue.penalty_scale_var * var_fatigue)
 
     def _reward_efficiency(self):
         # 目标：最大化单位功率的速度 (Velocity per Watt)

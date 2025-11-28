@@ -3,7 +3,7 @@ from legged_gym.envs.base.bio_legged_robot_config import BioLeggedRobotCfg
 
 class BioGo2RoughCfg( BioLeggedRobotCfg ):
     class env( BioLeggedRobotCfg.env ):
-        num_observations = 49
+        num_observations = 48 + 12
         num_envs = 4096
 
     class terrain( BioLeggedRobotCfg.terrain ):
@@ -58,30 +58,34 @@ class BioGo2RoughCfg( BioLeggedRobotCfg ):
         terminate_after_contacts_on = [ ] # Cancel for training stability
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
 
-    class rewards( LeggedRobotCfg.rewards ):
+    class rewards( BioLeggedRobotCfg.rewards ):
         base_height_target = 0.34
         soft_dof_pos_limit = 0.9
-        class scales( LeggedRobotCfg.rewards.scales ):
+        class scales( BioLeggedRobotCfg.rewards.scales ):
             orientation = -1.0
             torques = -0.0002
             feet_air_time =  1.5
-            base_height = -50.0
+            base_height = -10.0
             tracking_lin_vel = 2.0 # todo: add punish for moving during zero cmd
             tracking_ang_vel = 1.5
             stand_still = -0.0
             lin_vel_z = -2.0
             dof_pos_limits = -10.0
 
-    class domain_rand( LeggedRobotCfg.domain_rand ):
+            muscle_fatigue = -100.0
+
+        only_positive_rewards = True
+
+    class domain_rand( BioLeggedRobotCfg.domain_rand ):
         friction_range = [0.3, 2.0]
         push_interval_s = 8
         randomize_base_mass = True
         added_mass_range = [-0.8, 1.2]
 
-    class commands( LeggedRobotCfg.commands ):
+    class commands( BioLeggedRobotCfg.commands ):
         curriculum = True
         resampling_time = 10.
-        class ranges( LeggedRobotCfg.commands.ranges ):
+        class ranges( BioLeggedRobotCfg.commands.ranges ):
             lin_vel_x = [-2.0, 2.0] # min max [m/s]
             lin_vel_y = [-0.8, 0.8]   # min max [m/s]
             ang_vel_yaw = [-1.5, 1.5]    # min max [rad/s]
@@ -204,7 +208,12 @@ class BioGo2RoughCfgPPO( Go2RoughCfgPPO ):
     class runner( LeggedRobotCfgPPO.runner ):
         run_name = 'rough'
         experiment_name = 'rough_Go2_bio'
-        max_iterations = 3000
+        max_iterations = 1500
+        # # load and resume, has load problem if not use resume
+        # resume = True
+        # load_run = 'Nov27_23-08-09_rough/' # -1 = last run
+        # checkpoint = 500 # -1 = last saved model
+        # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_cyberdog2/' # updated from load_run and chkpt
 
 ########################################平地########################################
 
