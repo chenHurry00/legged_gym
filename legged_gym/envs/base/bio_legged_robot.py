@@ -49,6 +49,18 @@ class BioLeggedRobot(LeggedRobot):
         # 初始化：全部处于静息态 (MR=1.0, MA=0, MF=0)
         self.muscle_states[..., 0] = 1.0
 
+        # === 能量箱初始化 ===
+
+        # 初始化 W' 余额为满状态
+        self.w_prime_bal = torch.full(
+            (self.num_envs,),
+            self.cfg.metabolic.w_prime_total,
+            device=self.device,
+            dtype=torch.float
+        )
+        # 记录上一时刻的力矩用于计算功率变化率
+        self.last_torques = torch.zeros_like(self.torques)
+
 
     def _update_bio_energetics(self):
         """
@@ -120,6 +132,39 @@ class BioLeggedRobot(LeggedRobot):
         min_scale = params.fatigue_torque_scale
 
         self.fatigue_factor = min_scale + (1.0 - min_scale) * normalized_energy
+
+    def _post_physics_step_callback(self):
+        self._update_metabolic_state()
+        super()._post_physics_step_callback()
+
+    def _update_metabolic_state(self):
+        """
+        基于 Skiba (CP/W') 模型更新机器人的能量状态
+        """
+        # 1. 计算瞬时负载 (Proxy Power)
+        # 使用力矩平方和作为热损耗的近似
+        current_load = torch.sum(torch.square(self.torques), dim=1)
+
+        # 2. 计算相对于 CP 的盈余/赤字
+        cp = self.cfg.metabolic.cp_limit
+        excess_load = current_load - cp
+
+        # 3. 欧拉积分更新
+        dt = self.dt
+
+        # 消耗阶段 (P > CP)
+        drain = torch.clamp(excess_load, min=0.0) * dt
+
+        # 恢复阶段 (P < CP)
+        # 使用线性恢复简化模型，或者指数模型：
+        # recovery_rate = (cp - current_load) * (1 - exp(-dt/tau))
+        # 这里使用简化的线性恢复，稳定性更好：
+        recovery_capacity = torch.clamp(cp - current_load, min=0.0)
+        recovery = (recovery_capacity / self.cfg.metabolic.tau_recovery) * dt
+
+        # 更新并截断
+        self.w_prime_bal = self.w_prime_bal - drain + recovery
+        self.w_prime_bal = torch.clamp(self.w_prime_bal, 0.0, self.cfg.metabolic.w_prime_total)
 
 
     def _compute_torques(self, actions):
@@ -222,6 +267,7 @@ class BioLeggedRobot(LeggedRobot):
         # 归一化能量状态 (0.0 - 1.0)
         # 使用 1.0 代表满电，0.0 代表耗尽，这对神经网络更友好
         normalized_energy = self.energy_tank / self.cfg.bio_energetics.w_prime_capacity + 0.001
+        energy_level = (self.w_prime_bal / self.cfg.metabolic.w_prime_total).unsqueeze(1)
 
         # 将能量状态拼接到观测张量末尾
         # 注意：必须确保 cfg.env.num_observations 已相应增加
@@ -233,9 +279,9 @@ class BioLeggedRobot(LeggedRobot):
             (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
             self.dof_vel * self.obs_scales.dof_vel,
             self.actions,
-            self.muscle_states[..., 2] # <--- 3CC疲劳值
-            #normalized_energy  # <--- 疲劳驱动
             self.muscle_states[..., 2], # <--- 3CC疲劳值
+            energy_level  # <--- 能量池
+            # normalized_energy  # <--- 疲劳驱动
         ), dim=-1)
 
     def reset_idx(self, env_ids):
@@ -261,8 +307,16 @@ class BioLeggedRobot(LeggedRobot):
         self.muscle_states[..., 1] = 0.0
         self.muscle_states[..., 2] = 0.0
 
-    def _reward_muscle_fatigue(self):
-        # 提取疲劳态 MF
+        #  重置能量箱 W' 余额为满状态
+        self.w_prime_bal = torch.full(
+            (self.num_envs,),
+            self.cfg.metabolic.w_prime_total,
+            device=self.device,
+            dtype=torch.float
+        )
+        # 记录上一时刻的力矩用于计算功率变化率
+        self.last_torques = torch.zeros_like(self.torques)
+
     def _reward_penalty_3cc_max(self):
         fatigue = self.muscle_states[..., 2]  # (num_envs, num_dofs)
         max_fatigue = torch.max(fatigue, dim=1).values
@@ -308,3 +362,62 @@ class BioLeggedRobot(LeggedRobot):
         normalized_energy = self.energy_tank / self.cfg.bio_energetics.w_prime_capacity
 
         return (1e-3 / ((normalized_energy + 1e-3) ** 2)).squeeze()
+
+    # ---------------------------------------------------------
+    # 1. 代谢完整性奖励 (解决越障拒止)
+    # ---------------------------------------------------------
+    def _reward_metabolic_integrity(self):
+        # 归一化电量
+        w_norm = self.w_prime_bal / self.cfg.metabolic.w_prime_total
+
+        # 设计软势垒：电量 > 40% 时无惩罚，< 40% 时指数惩罚
+        threshold = 0.4
+        safety_margin = w_norm - threshold
+
+        # 使用 softplus 构造平滑的单边惩罚
+        # 当 w_norm >> 0.4, -safety_margin 是负数, softplus -> 0
+        # 当 w_norm << 0.4, -safety_margin 是正数, softplus -> 线性/指数增长
+        penalty = torch.nn.functional.softplus(-safety_margin * 10.0)
+
+        # 返回负值作为惩罚
+        return penalty
+
+    # ---------------------------------------------------------
+    # 2. 弹道摆动奖励 (解决拖脚)
+    # ---------------------------------------------------------
+    def _reward_ballistic_swing(self):
+        # 识别摆动相：接触力 Z 分量 < 1.0
+        # contact_forces shape: (envs, feet, 3)
+        contact_z = self.contact_forces[:, self.feet_indices, 2]
+        is_swing = contact_z < 1.0
+
+        # 获取各腿力矩
+        leg_torques = self.torques.view(self.num_envs, 4, 3)
+        # 计算每条腿的力矩平方和
+        leg_effort = torch.sum(torch.square(leg_torques), dim=2)
+
+        # 只惩罚摆动相的力矩
+        # 逻辑：要在摆动相保持低力矩，必须在离地时给足初速度并抬高
+        swing_penalty = leg_effort * is_swing.float()
+
+        return torch.sum(swing_penalty, dim=1)
+
+    # ---------------------------------------------------------
+    # 3. 动态间隙势垒 (辅助抗拖曳)
+    # ---------------------------------------------------------
+    def _reward_dynamic_clearance(self):
+        # 获取足端高度
+        foot_z = self.rigid_body_states[:, self.feet_indices, 2]
+
+        # 目标高度随速度增加: h = 0.02 + 0.1 * v_xy
+        cmd_vel = torch.norm(self.commands[:, :2], dim=1).unsqueeze(1)
+        target_h = 0.02 + 0.1 * cmd_vel
+
+        # 摆动相掩码
+        is_swing = self.contact_forces[:, self.feet_indices, 2] < 1.0
+
+        # 惩罚项：仅当 foot_z < target_h 时产生
+        height_error = target_h - foot_z
+        penalty = torch.nn.functional.softplus(height_error * 20.0)
+
+        return -torch.sum(penalty * is_swing.float(), dim=1)

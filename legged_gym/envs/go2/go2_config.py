@@ -76,6 +76,10 @@ class BioGo2RoughCfg( BioLeggedRobotCfg ):
             penalty_3cc_max = -20.0  # 严厉惩罚最大疲劳 (引导负载均衡)
             penalty_3cc_var = -10.0  # 惩罚疲劳值方差
 
+
+            metabolic_integrity = -1.0  # W' 耗尽惩罚
+            ballistic_swing = -0.0  # 摆动相力矩惩罚
+            dynamic_clearance = -0.0  # 速度相关的高度势垒
         only_positive_rewards = True
 
     class domain_rand( BioLeggedRobotCfg.domain_rand ):

@@ -4,7 +4,7 @@ class BioLeggedRobotCfg(LeggedRobotCfg):
     class env(LeggedRobotCfg.env):
         # 增加观测维度。原有的观测维度通常为48左右（取决于具体机器人）。
         # 需要增加1维，用于归一化的能量箱状态。
-        num_observations = 48 + 12
+        num_observations = 48 + 12 + 1
         num_privileged_obs = None # 如果使用特权观测，也需相应增加
 
     class bio_energetics:
@@ -41,19 +41,34 @@ class BioLeggedRobotCfg(LeggedRobotCfg):
         r = 10.0  # 休息恢复乘数 (主动冷却或对流冷却增强)
         dt = 0.02  # 疲劳模型的积分步长 (通常与控制频率一致)
 
-        # 奖励权重
-        penalty_scale_sum = 0.5  # 惩罚总疲劳
-        penalty_scale_max = 2.0  # 严厉惩罚最大疲劳 (引导负载均衡)
-        penalty_scale_var = 1.0  # 惩罚疲劳值方差
+    class metabolic:
+        # 针对 Unitree Go1 / AK80-6 的估算参数
+        # 假设 12 个电机。连续力矩 ~5Nm. CP = 12 * 5^2 = 300.
+        cp_limit = 300.0
+
+        # 能量容量 (Joules-proxy).
+        # 允许全功率(23Nm)爆发约 5秒.
+        # Max Power Proxy = 12 * 23^2 ≈ 6348.
+        # Excess = 6048. Capacity = 6048 * 5 ≈ 30000.
+        w_prime_total = 30000.0
+
+        # 恢复时间常数 (秒)
+        tau_recovery = 30.0
 
     class rewards (LeggedRobotCfg.rewards):
         class scales(LeggedRobotCfg.rewards.scales):
-            torques = -0.0001  # 降低传统的力矩惩罚权重，让位给 bio-energy
+            # 禁用传统的简单力矩惩罚
+            torques = -0.0
 
             # 新增生物能量奖励
             efficiency = 0.0  # 替代部分力矩惩罚
             energy_tank = 0.0  # 长期生存激励
             fatigue_penalty = -0.0  # 当能量小于一定阈值时的重罚（软终止）
+
+            # 新的生物学奖励
+            metabolic_integrity = -1.0  # W' 耗尽惩罚
+            ballistic_swing = -0.5  # 摆动相力矩惩罚
+            dynamic_clearance = -1.0  # 速度相关的高度势垒
 
             # 3CC
             penalty_3cc_sum = -5.0  # 惩罚总疲劳
