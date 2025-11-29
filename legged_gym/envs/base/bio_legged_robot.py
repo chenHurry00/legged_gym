@@ -308,14 +308,9 @@ class BioLeggedRobot(LeggedRobot):
         self.muscle_states[..., 2] = 0.0
 
         #  重置能量箱 W' 余额为满状态
-        self.w_prime_bal = torch.full(
-            (self.num_envs,),
-            self.cfg.metabolic.w_prime_total,
-            device=self.device,
-            dtype=torch.float
-        )
+        self.w_prime_bal[env_ids] = self.cfg.metabolic.w_prime_total
         # 记录上一时刻的力矩用于计算功率变化率
-        self.last_torques = torch.zeros_like(self.torques)
+        self.last_torques[env_ids] = torch.zeros_like(self.torques[env_ids])
 
     def _reward_penalty_3cc_max(self):
         fatigue = self.muscle_states[..., 2]  # (num_envs, num_dofs)
