@@ -44,16 +44,16 @@ class BioLeggedRobotCfg(LeggedRobotCfg):
     class metabolic:
         # 针对 Unitree Go1 / AK80-6 的估算参数
         # 假设 12 个电机。连续力矩 ~5Nm. CP = 12 * 5^2 = 300.
-        cp_limit = 300.0
+        cp_limit = 800
 
         # 能量容量 (Joules-proxy).
         # 允许全功率(23Nm)爆发约 5秒.
         # Max Power Proxy = 12 * 23^2 ≈ 6348.
         # Excess = 6048. Capacity = 6048 * 5 ≈ 30000.
-        w_prime_total = 30000.0
+        w_prime_total = 5000.0
 
         # 恢复时间常数 (秒)
-        tau_recovery = 30.0
+        tau_recovery = 0.2
 
     class rewards (LeggedRobotCfg.rewards):
         class scales(LeggedRobotCfg.rewards.scales):
