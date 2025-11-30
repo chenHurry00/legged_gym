@@ -3,7 +3,6 @@ from legged_gym.envs.base.bio_legged_robot_config import BioLeggedRobotCfg
 
 class BioGo2RoughCfg( BioLeggedRobotCfg ):
     class env( BioLeggedRobotCfg.env ):
-        num_observations = 48 + 12
         num_envs = 4096
 
     class terrain( BioLeggedRobotCfg.terrain ):
@@ -63,7 +62,6 @@ class BioGo2RoughCfg( BioLeggedRobotCfg ):
         soft_dof_pos_limit = 0.9
         class scales( BioLeggedRobotCfg.rewards.scales ):
             orientation = -1.0
-            torques = -0.0002
             feet_air_time =  1.5
             base_height = -10.0
             tracking_lin_vel = 2.0 # todo: add punish for moving during zero cmd
@@ -71,10 +69,11 @@ class BioGo2RoughCfg( BioLeggedRobotCfg ):
             stand_still = -0.0
             lin_vel_z = -2.0
             dof_pos_limits = -10.0
+            collision = -10.0
 
             penalty_3cc_sum = -0.0  # 惩罚总疲劳
             penalty_3cc_max = -20.0  # 严厉惩罚最大疲劳 (引导负载均衡)
-            penalty_3cc_var = -10.0  # 惩罚疲劳值方差
+            penalty_3cc_var = -20.0  # 惩罚疲劳值方差
 
 
             metabolic_integrity = -1.0  # W' 耗尽惩罚
