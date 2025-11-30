@@ -33,8 +33,13 @@ from .base_config import BaseConfig
 class LeggedRobotCfg(BaseConfig):
     class env:
         num_envs = 4096
-        num_observations = 235
-        num_privileged_obs = None # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
+        num_proprio = 45 # ang3 + gra3 + command3 + pos12 + vel12 + last_action12
+        history_length = 6
+        num_observations = num_proprio * history_length
+        num_scan = 187
+        # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
+        num_privileged_obs = 3 + num_proprio + num_scan # vel3 + pro + scans
+
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm

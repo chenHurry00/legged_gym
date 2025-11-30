@@ -61,6 +61,9 @@ class BaseTask():
         self.num_obs = cfg.env.num_observations
         self.num_privileged_obs = cfg.env.num_privileged_obs
         self.num_actions = cfg.env.num_actions
+        self.num_proprio = cfg.env.num_proprio
+        self.history_length = cfg.env.history_length
+        self.num_scan = cfg.env.num_scan
 
         # optimization flags for pytorch JIT
         torch._C._jit_set_profiling_mode(False)

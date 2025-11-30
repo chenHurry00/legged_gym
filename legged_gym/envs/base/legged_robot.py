@@ -211,21 +211,49 @@ class LeggedRobot(BaseTask):
     def compute_observations(self):
         """ Computes observations
         """
-        self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
-                                    self.base_ang_vel  * self.obs_scales.ang_vel,
-                                    self.projected_gravity,
-                                    self.commands[:, :3] * self.commands_scale,
-                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-                                    self.dof_vel * self.obs_scales.dof_vel,
-                                    self.actions
-                                    ),dim=-1)
-        # add perceptive inputs if not blind
-        if self.cfg.terrain.measure_heights:
-            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
-            self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
+        current_obs = torch.cat((self.base_ang_vel * self.obs_scales.ang_vel,
+                                 self.projected_gravity,
+                                 self.commands[:, :3] * self.commands_scale,
+                                 (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+                                 self.dof_vel * self.obs_scales.dof_vel,
+                                 self.actions,
+                                 ), dim=-1)
         # add noise if needed
         if self.add_noise:
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+            current_obs += (2 * torch.rand_like(current_obs) - 1) * self.noise_scale_vec[:self.num_proprio]
+
+        # update obs history
+        self.obs_buf = torch.cat((current_obs[:, :self.num_proprio], self.obs_buf[:, :-self.num_proprio]),
+                                 dim=-1)
+
+    def compute_privileged_observations(self):
+        """ Compute privileged observations.
+          """
+        energy_level = (self.w_prime_bal / self.cfg.metabolic.w_prime_total).unsqueeze(1)
+
+        current_obs = torch.cat((self.base_ang_vel * self.obs_scales.ang_vel,
+                                 self.projected_gravity,
+                                 self.commands[:, :3] * self.commands_scale,
+                                 (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+                                 self.dof_vel * self.obs_scales.dof_vel,
+                                 self.actions,
+                                 ), dim=-1)
+
+        # add perceptive inputs if not blind
+        current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel), dim=-1)
+
+        self.privileged_obs_buf = torch.cat((current_obs[:, :self.num_proprio],
+                                             self.base_lin_vel * self.obs_scales.lin_vel,), dim=-1)
+
+        if self.cfg.terrain.measure_heights:
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
+                                 1.) * self.obs_scales.height_measurements
+            self.privileged_obs_buf = torch.cat(
+                (self.privileged_obs_buf, heights), dim=-1)
+
+        # add noise if needed
+        if self.add_noise:
+            self.privileged_obs_buf += (2 * torch.rand_like(self.privileged_obs_buf) - 1) * self.noise_scale_vec
 
     def create_sim(self):
         """ Creates simulation, terrain and evironments
@@ -550,13 +578,14 @@ class LeggedRobot(BaseTask):
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.noise_scales
         noise_level = self.cfg.noise.noise_level
-        noise_vec[:3] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
-        noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
-        noise_vec[6:9] = noise_scales.gravity * noise_level
-        noise_vec[9:12] = 0. # commands
-        noise_vec[12:24] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
-        noise_vec[24:36] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[36:48] = 0. # previous actions
+
+        noise_vec[0:3] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
+        noise_vec[3:6] = noise_scales.gravity * noise_level
+        noise_vec[6:9] = 0. # commands
+        noise_vec[9:21] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
+        noise_vec[21:33] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[33:45] = 0. # previous actions
+        noise_vec[45:48] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
         if self.cfg.terrain.measure_heights:
             noise_vec[48:235] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
         return noise_vec
