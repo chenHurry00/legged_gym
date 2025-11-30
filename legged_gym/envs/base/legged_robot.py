@@ -181,6 +181,8 @@ class LeggedRobot(BaseTask):
         # log additional curriculum info
         if self.cfg.terrain.curriculum:
             self.extras["episode"]["terrain_level"] = torch.mean(self.terrain_levels.float())
+        if self.cfg.domain_rand.randomize_start_pos and self.cfg.domain_rand.curriculum:
+            self.extras["episode"]["domain_scale"] = self.cfg.domain_rand.domain_scale
         if self.cfg.commands.curriculum:
             self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
         # send timeout info to the algorithm
@@ -400,6 +402,68 @@ class LeggedRobot(BaseTask):
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+    def _randomize_start_state(self, env_ids, scale: float = 1.0):
+        """
+        统一随机化初始状态，支持 scale 缩放（用于 curriculum）
+
+        Args:
+            env_ids: 需要随机化的环境索引
+            scale:   随机范围缩放比例，0.0~1.0+
+                     例如：start_pos_range=[-1,1], scale=0.5 → 实际范围 [-0.5, 0.5]
+        """
+        cfg = self.cfg.domain_rand
+
+        # 1. 初始位置 xy
+        if getattr(cfg, "randomize_start_pos", False):
+            low = cfg.start_pos_range[0] * scale
+            high = cfg.start_pos_range[1] * scale
+            rand_xy = torch_rand_float(low, high, (len(env_ids), 2), device=self.device)
+            self.root_states[env_ids, :2] += rand_xy
+
+        # 2. 初始高度 z（直接设置而不是加偏移）
+        if getattr(cfg, "randomize_start_height", False):
+            low = cfg.start_height_range[0]
+            high = cfg.start_height_range[1]
+            rand_z = torch_rand_float(low, high, (len(env_ids), 1), device=self.device)
+            self.root_states[env_ids, 2:3] = rand_z  # 直接赋值
+
+        # 3. 初始姿态 (roll + pitch)
+        if getattr(cfg, "randomize_start_rot", False):
+            low = cfg.start_rot_range[0] * scale
+            high = cfg.start_rot_range[1] * scale
+            rand_roll = torch_rand_float(low, high, (len(env_ids), 1), device=self.device)
+            rand_pitch = torch_rand_float(low, high, (len(env_ids), 1), device=self.device)
+
+            # 四元数组合：q = q_roll * q_pitch
+            cos_r, sin_r = torch.cos(rand_roll / 2), torch.sin(rand_roll / 2)
+            cos_p, sin_p = torch.cos(rand_pitch / 2), torch.sin(rand_pitch / 2)
+
+            qw = cos_r * cos_p
+            qx = sin_r * cos_p
+            qy = cos_r * sin_p
+            qz = -sin_r * sin_p
+
+            quats = torch.cat([qx, qy, qz, qw], dim=1)
+            norm = torch.norm(quats, dim=1, keepdim=True)
+            quats = quats / norm.clamp(min=1e-8)  # 防止除0
+
+            self.root_states[env_ids, 3:7] = quats
+
+        # 4. 初始线速度
+        if getattr(cfg, "randomize_start_lin_vel", False):
+            low = cfg.start_lin_vel_range[0] * scale
+            high = cfg.start_lin_vel_range[1] * scale
+            rand_vel = torch_rand_float(low, high, (len(env_ids), 3), device=self.device)
+            self.root_states[env_ids, 7:10] = rand_vel  # 直接赋值（覆盖默认）
+
+        # 5. 初始角速度
+        if getattr(cfg, "randomize_start_ang_vel", False):
+            low = cfg.start_ang_vel_range[0] * scale
+            high = cfg.start_ang_vel_range[1] * scale
+            rand_ang = torch_rand_float(low, high, (len(env_ids), 3), device=self.device)
+            self.root_states[env_ids, 10:13] = rand_ang
+
     def _reset_root_states(self, env_ids):
         """ Resets ROOT states position and velocities of selected environmments
             Sets base position based on the curriculum
@@ -415,6 +479,15 @@ class LeggedRobot(BaseTask):
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
+
+        # 统一随机化
+        if self.cfg.domain_rand.randomize_start_pos:
+            if self.cfg.domain_rand.curriculum:
+                mean_level = self.terrain_levels.float().mean()
+                self.cfg.domain_rand.domain_scale = mean_level.item() / 5.0
+
+            self._randomize_start_state(env_ids, scale=self.cfg.domain_rand.domain_scale)
+
         # base velocities
         self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device) # [7:10]: lin vel, [10:13]: ang vel
         env_ids_int32 = env_ids.to(dtype=torch.int32)

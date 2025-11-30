@@ -127,6 +127,20 @@ class LeggedRobotCfg(BaseConfig):
         push_interval_s = 15
         max_push_vel_xy = 1.
 
+        # 随机初始状态参数
+        domain_scale = 0.2          # 缩放比例，课程学习时以terrain_level=5为基准比例放大
+        randomize_start_pos = True      # 随机化初始位置
+        curriculum = True              # 课程学习的初始状态
+        start_pos_range = [-0.5, 0.5]   # 初始位置随机范围 (x, y)
+        randomize_start_height = True   # 随机化初始高度
+        start_height_range = [0.30, 0.5] # 初始高度随机范围 (z)
+        randomize_start_rot = True      # 随机化初始姿态
+        start_rot_range = [-1.73, 1.73]   # 初始姿态随机范围 (roll, pitch)
+        randomize_start_lin_vel = True  # 随机化初始线速度
+        start_lin_vel_range = [-0.1, 0.1] # 初始线速度随机范围
+        randomize_start_ang_vel = True  # 随机化初始角速度
+        start_ang_vel_range = [-0.2, 0.2] # 初始角速度随机范围
+
     class rewards:
         class scales:
             termination = -0.0
