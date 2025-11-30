@@ -284,6 +284,59 @@ class BioLeggedRobot(LeggedRobot):
             # normalized_energy  # <--- 疲劳驱动
         ), dim=-1)
 
+    def compute_observations(self):
+        """ Computes observations
+        """
+        energy_level = (self.w_prime_bal / self.cfg.metabolic.w_prime_total).unsqueeze(1)
+
+        current_obs = torch.cat((self.base_ang_vel * self.obs_scales.ang_vel,
+                                 self.projected_gravity,
+                                 self.commands[:, :3] * self.commands_scale,
+                                 (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+                                 self.dof_vel * self.obs_scales.dof_vel,
+                                 self.actions,
+                                 self.muscle_states[..., 2],  # <--- 3CC疲劳值
+                                 energy_level  # <--- 能量池
+                                 ), dim=-1)
+        # add noise if needed
+        if self.add_noise:
+            current_obs += (2 * torch.rand_like(current_obs) - 1) * self.noise_scale_vec[:self.num_proprio]
+
+        # update obs history
+        self.obs_buf = torch.cat((current_obs[:, :self.num_proprio], self.obs_buf[:, :-self.num_proprio]),
+                                 dim=-1)
+
+    def compute_privileged_observations(self):
+        """ Compute privileged observations.
+          """
+        energy_level = (self.w_prime_bal / self.cfg.metabolic.w_prime_total).unsqueeze(1)
+
+        current_obs = torch.cat((self.base_ang_vel * self.obs_scales.ang_vel,
+                                 self.projected_gravity,
+                                 self.commands[:, :3] * self.commands_scale,
+                                 (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+                                 self.dof_vel * self.obs_scales.dof_vel,
+                                 self.actions,
+                                 self.muscle_states[..., 2],  # <--- 3CC疲劳值
+                                 energy_level  # <--- 能量池
+                                 ), dim=-1)
+
+        # add perceptive inputs if not blind
+        current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel), dim=-1)
+
+        self.privileged_obs_buf = torch.cat((current_obs[:, :self.num_proprio],
+                                             self.base_lin_vel * self.obs_scales.lin_vel,), dim=-1)
+
+        if self.cfg.terrain.measure_heights:
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
+                                 1.) * self.obs_scales.height_measurements
+            self.privileged_obs_buf = torch.cat(
+                (self.privileged_obs_buf, heights), dim=-1)
+
+        # add noise if needed
+        if self.add_noise:
+            self.privileged_obs_buf += (2 * torch.rand_like(self.privileged_obs_buf) - 1) * self.noise_scale_vec
+
     def reset_idx(self, env_ids):
         super().reset_idx(env_ids)
 

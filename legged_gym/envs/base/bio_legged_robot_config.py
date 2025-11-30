@@ -4,8 +4,13 @@ class BioLeggedRobotCfg(LeggedRobotCfg):
     class env(LeggedRobotCfg.env):
         # 增加观测维度。原有的观测维度通常为48左右（取决于具体机器人）。
         # 需要增加1维，用于归一化的能量箱状态。
-        num_observations = 48 + 12 + 1
-        num_privileged_obs = None # 如果使用特权观测，也需相应增加
+        num_proprio = 58  # ang3 + gra3 + command3 + pos12 + vel12 + last_action12 + muscle12 + energy1
+        history_length = 6
+        num_observations = num_proprio * history_length
+        num_scan = 187
+        # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
+        num_privileged_obs = 3 + num_proprio + num_scan # vel3 + pro + scans
+
 
     class bio_energetics:
         """
