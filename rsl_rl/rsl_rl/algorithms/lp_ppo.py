@@ -168,7 +168,7 @@ class LPPPO:
                 else:
                     value_loss = (returns_batch - value_batch).pow(2).mean()
 
-                imitation_loss = self.actor_critic.imitation_learning_loss(obs_batch)
+                imitation_loss = self.actor_critic.imitation_learning_loss(obs_batch, critic_obs_batch)
 
                 loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() + imitation_loss
 
