@@ -45,13 +45,11 @@ class LPActorCritic(nn.Module):
                         history_length,
                         num_scan,
                         #num_priv, # TODO：add priv
-                        proprio_latent_size=32,
                         history_latent_size=32,
                         scan_latent_size=256,
                         proprio_vel_latent_size=32,
                         #priv_latent_size=32,
-                        proprio_hidden_dims=[128,64],
-                        history_hidden_dims=[256,64],
+                        history_hidden_dims=[256, 64],
                         actor_hidden_dims=[256, 128, 64],
                         scan_hidden_dims=[256,256],
                         proprio_vel_hidden_dims=[128,64],
@@ -65,14 +63,13 @@ class LPActorCritic(nn.Module):
         super(LPActorCritic, self).__init__()
 
         self.num_prop = num_proprio
-        self.old_history_length = history_length - 1
+        self.history_length = history_length - 1
         self.num_scan = num_scan
         # self.num_priv = num_priv
 
         activation = get_activation(activation)
 
-        self.proprio_layer = build_mlp(num_proprio,proprio_hidden_dims,proprio_latent_size,activation)
-        self.history_layer = build_mlp(self.old_history_length*num_proprio,history_hidden_dims,history_latent_size,activation)
+        self.history_layer = build_mlp(self.history_length*num_proprio,history_hidden_dims,history_latent_size,activation)
         self.scan_layer = build_mlp(num_scan,scan_hidden_dims,scan_latent_size,activation)
         self.proprio_vel_layer = build_mlp(num_proprio+3,proprio_vel_hidden_dims,proprio_vel_latent_size,activation)
         #self.pivileged_layer = build_mlp(num_priv,privileged_hidden_dims,priv_latent_size,activation)
@@ -90,14 +87,14 @@ class LPActorCritic(nn.Module):
         self.bn = nn.BatchNorm1d(64, affine=False)
 
         # Policy
-        self.actor = build_mlp(proprio_latent_size+history_latent_size, actor_hidden_dims, num_actions, activation)
+        self.actor = build_mlp(self.num_prop + history_latent_size, actor_hidden_dims, num_actions, activation)
 
         # Value function
         self.critic = build_mlp(scan_latent_size+proprio_vel_latent_size,critic_hidden_dims,1,activation)
 
         networks = {
-            "Proprio": self.proprio_layer,
             "History": self.history_layer,
+            "Latent_z": self.latent_layer,
             "Actor": self.actor,
 
             "Scan": self.scan_layer,
@@ -153,7 +150,7 @@ class LPActorCritic(nn.Module):
         self.distribution = Normal(mean, mean*0. + self.std)
 
     def act(self, observations, **kwargs):
-        self.obs_hist = observations[:, self.num_prop:self.num_prop*(self.old_history_length+1)] # obs_hist size = history_length-1
+        self.obs_hist = observations[:, :self.num_prop*self.history_length] # obs_hist size = history_length-1
         obs_prop = observations[:, :self.num_prop]
         self.obs_prop = obs_prop
         batch_size = obs_prop.shape[0]
@@ -161,9 +158,10 @@ class LPActorCritic(nn.Module):
         obs_prop_norm, obs_hist_norm = self.normalize(obs_prop, self.obs_hist)
 
         obs_hist_flat = obs_hist_norm.reshape(batch_size, -1)  # (B, L*P)
-        history_latent = self.history_layer(obs_hist_flat)
-        proprio_latent = self.proprio_layer(obs_prop_norm)
-        actor_input = torch.cat([proprio_latent, history_latent], dim=1)
+        with torch.no_grad():
+            latent = self.history_layer(obs_hist_flat)
+            z = self.latent_layer(latent)
+        actor_input = torch.cat([self.obs_prop, z], dim=1)
 
         self.update_distribution(actor_input)
         return self.distribution.sample()
@@ -172,7 +170,7 @@ class LPActorCritic(nn.Module):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
     def act_inference(self, observations):
-        self.obs_hist = observations[:, self.num_prop:self.num_prop*(self.old_history_length+1)]
+        self.obs_hist = observations[:, :self.num_prop*self.history_length] # obs_hist size = history_length-1
         obs_prop = observations[:, :self.num_prop]
         self.obs_prop = obs_prop
         batch_size = obs_prop.shape[0]
@@ -180,9 +178,10 @@ class LPActorCritic(nn.Module):
         obs_prop_norm, obs_hist_norm = self.normalize(obs_prop, self.obs_hist)
 
         obs_hist_flat = obs_hist_norm.reshape(batch_size, -1)  # (B, L*P)
-        history_latent = self.history_layer(obs_hist_flat)
-        proprio_latent = self.proprio_layer(obs_prop_norm)
-        actor_input = torch.cat([proprio_latent, history_latent], dim=1)
+        with torch.no_grad():
+            latent = self.history_layer(obs_hist_flat)
+            z = self.latent_layer(latent)
+        actor_input = torch.cat([self.obs_prop, z], dim=1)
 
         actions_mean= self.actor(actor_input)
         return actions_mean
@@ -202,7 +201,8 @@ class LPActorCritic(nn.Module):
 
     def imitation_learning_loss(self, obs):
         obs_prop = obs[:, :self.num_prop]
-        loss = self.BarlowTwinsLoss(obs_prop,self.obs_hist,5e-3)
+        obs_old_his = obs[:, self.num_prop:self.num_prop*(self.history_length+1)]
+        loss = self.BarlowTwinsLoss(obs_prop,obs_old_his,5e-3)
         return loss
 
     def BarlowTwinsLoss(self, obs, obs_hist, weight): # TODO：vel loss
@@ -210,7 +210,7 @@ class LPActorCritic(nn.Module):
 
         obs_hist_full = torch.cat([
                 obs,
-                obs_hist[:,:self.num_prop*(self.old_history_length-1)],
+                obs_hist[:,:self.num_prop*(self.history_length-1)],
             ], dim=1)
         b = obs.size()[0]
 
