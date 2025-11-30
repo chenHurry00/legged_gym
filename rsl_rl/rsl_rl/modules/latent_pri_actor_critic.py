@@ -65,20 +65,20 @@ class LPActorCritic(nn.Module):
         super(LPActorCritic, self).__init__()
 
         self.num_prop = num_proprio
-        self.history_length = history_length - 1
+        self.old_history_length = history_length - 1
         self.num_scan = num_scan
         # self.num_priv = num_priv
 
         activation = get_activation(activation)
 
         self.proprio_layer = build_mlp(num_proprio,proprio_hidden_dims,proprio_latent_size,activation)
-        self.history_layer = build_mlp(self.history_length*num_proprio,history_hidden_dims,history_latent_size,activation)
+        self.history_layer = build_mlp(self.old_history_length*num_proprio,history_hidden_dims,history_latent_size,activation)
         self.scan_layer = build_mlp(num_scan,scan_hidden_dims,scan_latent_size,activation)
         self.proprio_vel_layer = build_mlp(num_proprio+3,proprio_vel_hidden_dims,proprio_vel_latent_size,activation)
         #self.pivileged_layer = build_mlp(num_priv,privileged_hidden_dims,priv_latent_size,activation)
 
         # history encoder
-        self.latent_layer = nn.Sequential(nn.Linear(history_hidden_dims[-1], 32),
+        self.latent_layer = nn.Sequential(nn.Linear(history_latent_size, 32),
                                           nn.BatchNorm1d(32),
                                           nn.ELU(),
                                           nn.Linear(32, history_latent_size))
@@ -153,7 +153,7 @@ class LPActorCritic(nn.Module):
         self.distribution = Normal(mean, mean*0. + self.std)
 
     def act(self, observations, **kwargs):
-        self.obs_hist = observations[:, self.num_prop:self.num_prop*(self.history_length+1)] # obs_hist size = history_length-1
+        self.obs_hist = observations[:, self.num_prop:self.num_prop*(self.old_history_length+1)] # obs_hist size = history_length-1
         obs_prop = observations[:, :self.num_prop]
         self.obs_prop = obs_prop
         batch_size = obs_prop.shape[0]
@@ -172,7 +172,7 @@ class LPActorCritic(nn.Module):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
     def act_inference(self, observations):
-        self.obs_hist = observations[:, self.num_prop:self.num_prop*(self.history_length+1)]
+        self.obs_hist = observations[:, self.num_prop:self.num_prop*(self.old_history_length+1)]
         obs_prop = observations[:, :self.num_prop]
         self.obs_prop = obs_prop
         batch_size = obs_prop.shape[0]
@@ -210,8 +210,7 @@ class LPActorCritic(nn.Module):
 
         obs_hist_full = torch.cat([
                 obs,
-                obs_hist[:,:-1,:],
-                obs.unsqueeze(1)
+                obs_hist[:,:self.num_prop*(self.old_history_length-1)],
             ], dim=1)
         b = obs.size()[0]
 
