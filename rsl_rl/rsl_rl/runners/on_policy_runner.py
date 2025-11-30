@@ -36,8 +36,8 @@ import statistics
 from torch.utils.tensorboard import SummaryWriter
 import torch
 
-from rsl_rl.algorithms import PPO
-from rsl_rl.modules import ActorCritic, ActorCriticRecurrent
+from rsl_rl.algorithms import PPO, LPPPO
+from rsl_rl.modules import ActorCritic, ActorCriticRecurrent, LPActorCritic
 from rsl_rl.env import VecEnv
 
 
@@ -59,12 +59,22 @@ class OnPolicyRunner:
         else:
             num_critic_obs = self.env.num_obs
         actor_critic_class = eval(self.cfg["policy_class_name"]) # ActorCritic
-        actor_critic: ActorCritic = actor_critic_class( self.env.num_obs,
-                                                        num_critic_obs,
-                                                        self.env.num_actions,
+        ### PPO ###
+        # actor_critic: ActorCritic = actor_critic_class( self.env.num_obs,
+        #                                                 num_critic_obs,
+        #                                                 self.env.num_actions,
+        #                                                 **self.policy_cfg).to(self.device)
+        # alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
+        # self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
+        ### LPPPO ###
+        actor_critic: LPActorCritic = actor_critic_class( self.env.num_actions,
+                                                          self.env.num_proprio,
+                                                          self.env.history_length,
+                                                          self.env.num_scan,
                                                         **self.policy_cfg).to(self.device)
-        alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
-        self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
+        alg_class = eval(self.cfg["algorithm_class_name"]) # LPPPO
+        self.alg: LPPPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
+
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
 

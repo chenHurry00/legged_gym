@@ -211,6 +211,8 @@ class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
 
 class BioGo2RoughCfgPPO( Go2RoughCfgPPO ):
     class runner( LeggedRobotCfgPPO.runner ):
+        policy_class_name = 'LPActorCritic'
+        algorithm_class_name = 'LPPPO'
         run_name = 'rough'
         experiment_name = 'rough_Go2_bio'
         max_iterations = 1500

@@ -30,3 +30,5 @@
 
 from .actor_critic import ActorCritic
 from .actor_critic_recurrent import ActorCriticRecurrent
+from .latent_pri_actor_critic import LPActorCritic
+from .utility.common_modules import get_activation,StateHistoryEncoder
