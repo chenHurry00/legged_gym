@@ -36,7 +36,11 @@ from torch.distributions import Normal
 from torch.nn.modules import rnn
 
 from .utility.normalizer import EmpiricalNormalization
-from .utility.common_modules import MAE, VQVAE, VQVAE_CNN, VQVAE_EMA, VQVAE_RNN, AutoEncoder, BetaVAE, CnnHistoryEncoder, MixedLayerNormMlp, MixedLipMlp, MixedMlp, RnnBarlowTwinsStateHistoryEncoder, RnnDoubleHeadEncoder, RnnEncoder, RnnStateHistoryEncoder, StateHistoryEncoder, VQVAE_Trans, VQVAE_vel, VQVAE_vel_conv, get_activation, mlp_batchnorm_factory, mlp_factory, mlp_layernorm_factory
+from .utility.common_modules import MAE, VQVAE, VQVAE_CNN, VQVAE_EMA, VQVAE_RNN, AutoEncoder, BetaVAE, \
+    CnnHistoryEncoder, MixedLayerNormMlp, MixedLipMlp, MixedMlp, RnnBarlowTwinsStateHistoryEncoder, \
+    RnnDoubleHeadEncoder, RnnEncoder, RnnStateHistoryEncoder, StateHistoryEncoder, VQVAE_Trans, VQVAE_vel, \
+    VQVAE_vel_conv, get_activation, mlp_batchnorm_factory, mlp_factory, mlp_layernorm_factory
+
 
 class LPActorCritic(nn.Module):
     is_recurrent = False
@@ -59,7 +63,8 @@ class LPActorCritic(nn.Module):
                         init_noise_std=1.0,
                         **kwargs):
         if kwargs:
-            print("ActorCritic.__init__ got unexpected arguments, which will be ignored: " + str([key for key in kwargs.keys()]))
+            print("ActorCritic.__init__ got unexpected arguments, which will be ignored: " + str(
+                [key for key in kwargs.keys()]))
         super(LPActorCritic, self).__init__()
 
         self.num_prop = num_proprio
@@ -69,11 +74,13 @@ class LPActorCritic(nn.Module):
 
         activation = get_activation(activation)
 
-        self.history_layer = build_mlp(self.history_length*num_proprio,history_hidden_dims,history_latent_size,activation)
-        self.scan_layer = build_mlp(num_scan,scan_hidden_dims,scan_latent_size,activation)
-        self.proprio_vel_layer = build_mlp(num_proprio+3,proprio_vel_hidden_dims,proprio_vel_latent_size,activation)
+        self.history_layer = build_mlp(self.history_length * num_proprio, history_hidden_dims, history_latent_size,
+                                       activation)
+        self.scan_layer = build_mlp(num_scan, scan_hidden_dims, scan_latent_size, activation)
+        self.proprio_vel_layer = build_mlp(num_proprio + 3, proprio_vel_hidden_dims, proprio_vel_latent_size,
+                                           activation)
         self.vel_layer = nn.Linear(history_latent_size, 3)
-        #self.pivileged_layer = build_mlp(num_priv,privileged_hidden_dims,priv_latent_size,activation)
+        # self.pivileged_layer = build_mlp(num_priv,privileged_hidden_dims,priv_latent_size,activation)
 
         # history encoder
         self.latent_layer = nn.Sequential(nn.Linear(history_latent_size, 32),
@@ -81,17 +88,17 @@ class LPActorCritic(nn.Module):
                                           nn.ELU(),
                                           nn.Linear(32, history_latent_size))
         self.projector = nn.Sequential(*mlp_batchnorm_factory(activation=activation,
-                                 input_dims=history_latent_size,
-                                 out_dims=64,
-                                 hidden_dims=[64],
-                                 bias=False))
+                                                              input_dims=history_latent_size,
+                                                              out_dims=64,
+                                                              hidden_dims=[64],
+                                                              bias=False))
         self.bn = nn.BatchNorm1d(64, affine=False)
 
         # Policy
         self.actor = build_mlp(self.num_prop + 3 + history_latent_size, actor_hidden_dims, num_actions, activation)
 
         # Value function
-        self.critic = build_mlp(scan_latent_size+proprio_vel_latent_size,critic_hidden_dims,1,activation)
+        self.critic = build_mlp(scan_latent_size + proprio_vel_latent_size, critic_hidden_dims, 1, activation)
 
         networks = {
             "History": self.history_layer,
@@ -100,9 +107,9 @@ class LPActorCritic(nn.Module):
 
             "Scan": self.scan_layer,
             "Proprio Vel": self.proprio_vel_layer,
-            #"Privileged": self.privileged_layer,
+            # "Privileged": self.privileged_layer,
             "Critic": self.critic
-            }
+        }
         for name, net in networks.items():
             print(f"{name} MLP: {net}")
 
@@ -118,7 +125,7 @@ class LPActorCritic(nn.Module):
         self.distribution = None
         # disable args validation for speedup
         Normal.set_default_validate_args = False
-        
+
         # seems that we get better performance without init
         # self.init_memory_weights(self.memory_a, 0.001, 0.)
         # self.init_memory_weights(self.memory_c, 0.001, 0.)
@@ -129,13 +136,12 @@ class LPActorCritic(nn.Module):
         [torch.nn.init.orthogonal_(module.weight, gain=scales[idx]) for idx, module in
          enumerate(mod for mod in sequential if isinstance(mod, nn.Linear))]
 
-
     def reset(self, dones=None):
         pass
 
     def forward(self):
         raise NotImplementedError
-    
+
     @property
     def action_mean(self):
         return self.distribution.mean
@@ -143,17 +149,17 @@ class LPActorCritic(nn.Module):
     @property
     def action_std(self):
         return self.distribution.stddev
-    
+
     @property
     def entropy(self):
         return self.distribution.entropy().sum(dim=-1)
 
     def update_distribution(self, observations):
         mean = self.actor(observations)
-        self.distribution = Normal(mean, mean*0. + self.std)
+        self.distribution = Normal(mean, mean * 0. + self.std)
 
     def act(self, observations, **kwargs):
-        self.obs_hist = observations[:, :self.num_prop*self.history_length] # obs_hist size = history_length-1
+        self.obs_hist = observations[:, :self.num_prop * self.history_length]  # obs_hist size = history_length-1
         obs_prop = observations[:, :self.num_prop]
         batch_size = obs_prop.shape[0]
 
@@ -167,12 +173,12 @@ class LPActorCritic(nn.Module):
         actor_input = torch.cat([obs_prop_norm, vel, z], dim=1)
         self.update_distribution(actor_input)
         return self.distribution.sample()
-    
+
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
     def act_inference(self, observations):
-        self.obs_hist = observations[:, :self.num_prop*self.history_length] # obs_hist size = history_length-1
+        self.obs_hist = observations[:, :self.num_prop * self.history_length]  # obs_hist size = history_length-1
         obs_prop = observations[:, :self.num_prop]
         batch_size = obs_prop.shape[0]
 
@@ -185,13 +191,13 @@ class LPActorCritic(nn.Module):
             vel = self.vel_layer(latent)
         actor_input = torch.cat([obs_prop_norm, vel, z], dim=1)
 
-        actions_mean= self.actor(actor_input)
+        actions_mean = self.actor(actor_input)
         return actions_mean
 
     def evaluate(self, critic_observations, **kwargs):
-        obs_prop_vel = critic_observations[:, :self.num_prop+3]
-        obs_scan = critic_observations[:, self.num_prop+3:self.num_prop+self.num_scan+3]
-        #obs_priv = critic_observations[:, self.num_prop+self.num_scan+3:self.num_prop+self.num_scan+self.num_priv+3]
+        obs_prop_vel = critic_observations[:, :self.num_prop + 3]
+        obs_scan = critic_observations[:, self.num_prop + 3:self.num_prop + self.num_scan + 3]
+        # obs_priv = critic_observations[:, self.num_prop+self.num_scan+3:self.num_prop+self.num_scan+self.num_priv+3]
 
         # Normalize inputs
         obs_prop_vel_norm = torch.cat(
@@ -219,9 +225,9 @@ class LPActorCritic(nn.Module):
         obs_prop_vel = self.obs_vel_normalizer(obs_prop_vel)
 
         obs_hist_full = torch.cat([
-                obs,
-                obs_hist[:,:self.num_prop*(self.history_length-1)],
-            ], dim=1)
+            obs,
+            obs_hist[:, :self.num_prop * (self.history_length - 1)],
+        ], dim=1)
         b = obs.size()[0]
 
         # obs_hist = obs_hist[:,5:,:].reshape(b,-1)

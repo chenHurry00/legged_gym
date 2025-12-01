@@ -260,30 +260,6 @@ class BioLeggedRobot(LeggedRobot):
 
         return torques
 
-
-    def compute_observations(self):
-        # ... 计算 dof_pos, dof_vel, base_vel 等...
-
-        # 归一化能量状态 (0.0 - 1.0)
-        # 使用 1.0 代表满电，0.0 代表耗尽，这对神经网络更友好
-        normalized_energy = self.energy_tank / self.cfg.bio_energetics.w_prime_capacity + 0.001
-        energy_level = (self.w_prime_bal / self.cfg.metabolic.w_prime_total).unsqueeze(1)
-
-        # 将能量状态拼接到观测张量末尾
-        # 注意：必须确保 cfg.env.num_observations 已相应增加
-        self.obs_buf = torch.cat((
-            self.base_lin_vel * self.obs_scales.lin_vel,
-            self.base_ang_vel * self.obs_scales.ang_vel,
-            self.projected_gravity,
-            self.commands[:, :3] * self.commands_scale,
-            (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-            self.dof_vel * self.obs_scales.dof_vel,
-            self.actions,
-            self.muscle_states[..., 2], # <--- 3CC疲劳值
-            energy_level  # <--- 能量池
-            # normalized_energy  # <--- 疲劳驱动
-        ), dim=-1)
-
     def compute_observations(self):
         """ Computes observations
         """
