@@ -110,7 +110,8 @@ class LPActorCritic(nn.Module):
         self.obs_prop = None
         self.obs_hist = None
         self.obs_normalizer = EmpiricalNormalization(shape=num_proprio)
-        self.vel_normalizer = EmpiricalNormalization(shape=3)
+        self.obs_vel_normalizer = EmpiricalNormalization(shape=num_proprio+3)
+        self.scan_normalizer = EmpiricalNormalization(shape=num_scan)
 
         # Action noise
         self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
@@ -154,7 +155,6 @@ class LPActorCritic(nn.Module):
     def act(self, observations, **kwargs):
         self.obs_hist = observations[:, :self.num_prop*self.history_length] # obs_hist size = history_length-1
         obs_prop = observations[:, :self.num_prop]
-        self.obs_prop = obs_prop
         batch_size = obs_prop.shape[0]
 
         obs_prop_norm, obs_hist_norm = self.normalize(obs_prop, self.obs_hist)
@@ -164,8 +164,7 @@ class LPActorCritic(nn.Module):
             latent = self.history_layer(obs_hist_flat)
             z = self.latent_layer(latent)
             vel = self.vel_layer(latent)
-        actor_input = torch.cat([self.obs_prop, vel, z], dim=1)
-
+        actor_input = torch.cat([obs_prop_norm, vel, z], dim=1)
         self.update_distribution(actor_input)
         return self.distribution.sample()
     
@@ -175,7 +174,6 @@ class LPActorCritic(nn.Module):
     def act_inference(self, observations):
         self.obs_hist = observations[:, :self.num_prop*self.history_length] # obs_hist size = history_length-1
         obs_prop = observations[:, :self.num_prop]
-        self.obs_prop = obs_prop
         batch_size = obs_prop.shape[0]
 
         obs_prop_norm, obs_hist_norm = self.normalize(obs_prop, self.obs_hist)
@@ -185,7 +183,7 @@ class LPActorCritic(nn.Module):
             latent = self.history_layer(obs_hist_flat)
             z = self.latent_layer(latent)
             vel = self.vel_layer(latent)
-        actor_input = torch.cat([self.obs_prop, vel, z], dim=1)
+        actor_input = torch.cat([obs_prop_norm, vel, z], dim=1)
 
         actions_mean= self.actor(actor_input)
         return actions_mean
@@ -195,9 +193,15 @@ class LPActorCritic(nn.Module):
         obs_scan = critic_observations[:, self.num_prop+3:self.num_prop+self.num_scan+3]
         #obs_priv = critic_observations[:, self.num_prop+self.num_scan+3:self.num_prop+self.num_scan+self.num_priv+3]
 
-        prop_vel_latent = self.proprio_vel_layer(obs_prop_vel)
-        scan_latent = self.scan_layer(obs_scan)
-        #priv_latent = self.privileged_layer(obs_priv)
+        # Normalize inputs
+        obs_prop_vel_norm = torch.cat(
+            [self.obs_normalizer(obs_prop_vel[:, :self.num_prop]), obs_prop_vel[:, self.num_prop:]],
+            dim=1)  # Normalize proprio, keep vel as is
+        obs_scan_norm = self.scan_normalizer(obs_scan)
+
+        prop_vel_latent = self.proprio_vel_layer(obs_prop_vel_norm)
+        scan_latent = self.scan_layer(obs_scan_norm)
+        # priv_latent = self.privileged_layer(obs_priv)
         value_input = torch.cat([prop_vel_latent, scan_latent], dim=1)
 
         value = self.critic(value_input)
@@ -205,14 +209,14 @@ class LPActorCritic(nn.Module):
 
     def imitation_learning_loss(self, obs, critic_obs):
         obs_prop = obs[:, :self.num_prop]
-        obs_old_his = obs[:, self.num_prop:self.num_prop*(self.history_length+1)]
-        obs_vel = critic_obs[:, self.num_prop:self.num_prop+3]
-        loss = self.BarlowTwinsLoss(obs_prop,obs_old_his,obs_vel,5e-3)
+        obs_old_his = obs[:, self.num_prop:self.num_prop * (self.history_length + 1)]
+        obs_prop_vel = critic_obs[:, :self.num_prop + 3]
+        loss = self.BarlowTwinsLoss(obs_prop, obs_old_his, obs_prop_vel, 5e-3)
         return loss
 
-    def BarlowTwinsLoss(self, obs, obs_hist, obs_vel, weight):
+    def BarlowTwinsLoss(self, obs, obs_hist, obs_prop_vel, weight):
         obs, obs_hist = self.normalize(obs, obs_hist)
-        obs_vel = self.vel_normalizer(obs_vel)
+        obs_prop_vel = self.obs_vel_normalizer(obs_prop_vel)
 
         obs_hist_full = torch.cat([
                 obs,
@@ -239,7 +243,7 @@ class LPActorCritic(nn.Module):
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = self.off_diagonal(c).pow_(2).sum()
 
-        vel_loss = torch.nn.functional.mse_loss(z1_v, obs_vel)  # 计算预测和真实速度的均方误差
+        vel_loss = torch.nn.functional.mse_loss(z1_v, obs_prop_vel[:, self.num_prop:self.num_prop+3])  # 计算预测和真实速度的均方误差
 
         loss = on_diag + weight * off_diag + vel_loss
 
