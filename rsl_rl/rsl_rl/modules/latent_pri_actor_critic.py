@@ -74,16 +74,18 @@ class LPActorCritic(nn.Module):
 
         activation = get_activation(activation)
 
-        self.history_layer = build_mlp(self.history_length * num_proprio, history_hidden_dims, history_latent_size,
-                                       activation)
+        self.history_layer = nn.Sequential(*mlp_batchnorm_factory(activation=activation,
+                                 input_dims=self.num_prop*self.history_length,
+                                 out_dims=None,
+                                 hidden_dims=history_hidden_dims))
         self.scan_layer = build_mlp(num_scan, scan_hidden_dims, scan_latent_size, activation)
         self.proprio_vel_layer = build_mlp(num_proprio + 3, proprio_vel_hidden_dims, proprio_vel_latent_size,
                                            activation)
-        self.vel_layer = nn.Linear(history_latent_size, 3)
+        self.vel_layer = nn.Linear(history_hidden_dims[-1], 3)
         # self.pivileged_layer = build_mlp(num_priv,privileged_hidden_dims,priv_latent_size,activation)
 
         # history encoder
-        self.latent_layer = nn.Sequential(nn.Linear(history_latent_size, 32),
+        self.latent_layer = nn.Sequential(nn.Linear(history_hidden_dims[-1], 32),
                                           nn.BatchNorm1d(32),
                                           nn.ELU(),
                                           nn.Linear(32, history_latent_size))
@@ -170,7 +172,8 @@ class LPActorCritic(nn.Module):
             latent = self.history_layer(obs_hist_flat)
             z = self.latent_layer(latent)
             vel = self.vel_layer(latent)
-        actor_input = torch.cat([obs_prop_norm, vel, z], dim=1)
+        actor_input = torch.cat([obs_prop_norm.detach(), vel.detach(), z.detach()], dim=-1)
+
         self.update_distribution(actor_input)
         return self.distribution.sample()
 
@@ -189,7 +192,7 @@ class LPActorCritic(nn.Module):
             latent = self.history_layer(obs_hist_flat)
             z = self.latent_layer(latent)
             vel = self.vel_layer(latent)
-        actor_input = torch.cat([obs_prop_norm, vel, z], dim=1)
+        actor_input = torch.cat([obs_prop_norm.detach(), vel.detach(), z.detach()], dim=-1)
 
         actions_mean = self.actor(actor_input)
         return actions_mean
@@ -223,6 +226,9 @@ class LPActorCritic(nn.Module):
     def BarlowTwinsLoss(self, obs, obs_hist, obs_prop_vel, weight):
         obs, obs_hist = self.normalize(obs, obs_hist)
         obs_prop_vel = self.obs_vel_normalizer(obs_prop_vel)
+
+        obs = obs.detach()
+        obs_hist = obs_hist.detach()
 
         obs_hist_full = torch.cat([
             obs,
