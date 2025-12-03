@@ -67,11 +67,11 @@ class OnPolicyRunner:
         # alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
         # self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
         ### LPPPO ###
-        actor_critic: LPActorCritic = actor_critic_class( self.env.num_actions,
-                                                          self.env.num_proprio,
-                                                          self.env.history_length,
-                                                          self.env.num_scan,
-                                                        **self.policy_cfg).to(self.device)
+        actor_critic: LPActorCritic = actor_critic_class(num_actions=self.env.num_actions,
+                                                         num_proprio=self.env.num_proprio,
+                                                         history_length=self.env.history_length,
+                                                         num_scan=self.env.num_scan,
+                                                         **self.policy_cfg).to(self.device)
         alg_class = eval(self.cfg["algorithm_class_name"]) # LPPPO
         self.alg: LPPPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
 
@@ -140,6 +140,10 @@ class OnPolicyRunner:
                 self.alg.compute_returns(critic_obs)
             
             mean_value_loss, mean_surrogate_loss = self.alg.update()
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.alg.actor_critic.parameters(), max_norm=1.0)
+            self.writer.add_scalar('Grad/grad_norm', grad_norm, it)
+            self.log_grad_norms(self.alg.actor_critic, prefix='Grad/', it=it)
+
             stop = time.time()
             learn_time = stop - start
             if self.log_dir is not None:
@@ -241,3 +245,32 @@ class OnPolicyRunner:
         if device is not None:
             self.alg.actor_critic.to(device)
         return self.alg.actor_critic.act_inference
+
+
+    def log_grad_norms(self, model, prefix='Grad/', it=None):
+        """
+        递归计算并记录模型及其子模块的梯度范数到 TensorBoard。
+
+        Args:
+            model: 要遍历的模型 (e.g., self.alg.actor_critic)
+            prefix: 日志标签前缀 (默认 'Grad/')
+            it: 当前迭代步数 (用于 add_scalar)
+        """
+
+        def recurse(module, module_prefix=''):
+            for name, child in module.named_children():
+                # 计算当前子模块的梯度范数
+                params = [p for p in child.parameters() if p.grad is not None]
+                if params:
+                    grad_norm = torch.norm(
+                        torch.stack([torch.norm(p.grad.detach(), 2) for p in params]),
+                        2
+                    ).item()
+                    full_tag = prefix + module_prefix + name + '_grad_norm'
+                    self.writer.add_scalar(full_tag, grad_norm, it)
+
+                # 递归进入更深层的子模块
+                recurse(child, module_prefix + name + '.')
+
+        # 从顶层开始递归
+        recurse(model)
