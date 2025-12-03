@@ -79,8 +79,8 @@ class LPActorCritic(nn.Module):
                                  out_dims=None,
                                  hidden_dims=history_hidden_dims))
         self.scan_layer = build_mlp(num_scan, scan_hidden_dims, scan_latent_size, activation)
-        self.proprio_vel_layer = build_mlp(num_proprio + 3, proprio_vel_hidden_dims, proprio_vel_latent_size,
-                                           activation)
+        # self.proprio_vel_layer = build_mlp(num_proprio + 3, proprio_vel_hidden_dims, proprio_vel_latent_size,
+        #                                    activation)
         self.vel_layer = nn.Linear(history_hidden_dims[-1], 3)
         # self.pivileged_layer = build_mlp(num_priv,privileged_hidden_dims,priv_latent_size,activation)
 
@@ -97,10 +97,28 @@ class LPActorCritic(nn.Module):
         self.bn = nn.BatchNorm1d(64, affine=False)
 
         # Policy
-        self.actor = build_mlp(self.num_prop + 3 + history_latent_size, actor_hidden_dims, num_actions, activation)
+        actor_layers = []
+        actor_layers.append(nn.Linear(self.num_prop + 3 + history_latent_size, actor_hidden_dims[0]))
+        actor_layers.append(activation)
+        for l in range(len(actor_hidden_dims)):
+            if l == len(actor_hidden_dims) - 1:
+                actor_layers.append(nn.Linear(actor_hidden_dims[l], num_actions))
+            else:
+                actor_layers.append(nn.Linear(actor_hidden_dims[l], actor_hidden_dims[l + 1]))
+                actor_layers.append(activation)
+        self.actor = nn.Sequential(*actor_layers)
 
         # Value function
-        self.critic = build_mlp(scan_latent_size + proprio_vel_latent_size, critic_hidden_dims, 1, activation)
+        critic_layers = []
+        critic_layers.append(nn.Linear(self.num_prop + 3 + scan_latent_size, critic_hidden_dims[0]))
+        critic_layers.append(activation)
+        for l in range(len(critic_hidden_dims)):
+            if l == len(critic_hidden_dims) - 1:
+                critic_layers.append(nn.Linear(critic_hidden_dims[l], 1))
+            else:
+                critic_layers.append(nn.Linear(critic_hidden_dims[l], critic_hidden_dims[l + 1]))
+                critic_layers.append(activation)
+        self.critic = nn.Sequential(*critic_layers)
 
         networks = {
             "History": self.history_layer,
@@ -108,7 +126,7 @@ class LPActorCritic(nn.Module):
             "Actor": self.actor,
 
             "Scan": self.scan_layer,
-            "Proprio Vel": self.proprio_vel_layer,
+            # "Proprio Vel": self.proprio_vel_layer,
             # "Privileged": self.privileged_layer,
             "Critic": self.critic
         }
@@ -199,19 +217,20 @@ class LPActorCritic(nn.Module):
 
     def evaluate(self, critic_observations, **kwargs):
         obs_prop_vel = critic_observations[:, :self.num_prop + 3]
-        obs_scan = critic_observations[:, self.num_prop + 3:self.num_prop + self.num_scan + 3]
+        obs_scan = critic_observations[:, self.num_prop + 3:
+                                          self.num_prop + 3 + self.num_scan]
         # obs_priv = critic_observations[:, self.num_prop+self.num_scan+3:self.num_prop+self.num_scan+self.num_priv+3]
-
-        # Normalize inputs
-        obs_prop_vel_norm = torch.cat(
-            [self.obs_normalizer(obs_prop_vel[:, :self.num_prop]), obs_prop_vel[:, self.num_prop:]],
-            dim=1)  # Normalize proprio, keep vel as is
+        #
+        # # Normalize inputs
+        #batch_size = obs_prop_vel.shape[0]
+        #obs_prop_vel_norm = self.obs_vel_normalizer(critic_observations.reshape(-1, self.num_prop + 3)).reshape(batch_size, -1)
+        obs_prop_vel_norm = self.obs_vel_normalizer(obs_prop_vel)  # Normalize proprio, keep vel as is
         obs_scan_norm = self.scan_normalizer(obs_scan)
-
-        prop_vel_latent = self.proprio_vel_layer(obs_prop_vel_norm)
+        #
+        # #prop_vel_latent = self.proprio_vel_layer(obs_prop_vel_norm)
         scan_latent = self.scan_layer(obs_scan_norm)
-        # priv_latent = self.privileged_layer(obs_priv)
-        value_input = torch.cat([prop_vel_latent, scan_latent], dim=1)
+        # # priv_latent = self.privileged_layer(obs_priv)
+        value_input = torch.cat([obs_prop_vel_norm, scan_latent], dim=1)
 
         value = self.critic(value_input)
         return value
