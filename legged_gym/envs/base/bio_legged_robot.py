@@ -297,9 +297,6 @@ class BioLeggedRobot(LeggedRobot):
                                  energy_level  # <--- 能量池
                                  ), dim=-1)
 
-        # add perceptive inputs if not blind
-        current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel), dim=-1)
-
         self.privileged_obs_buf = torch.cat((current_obs[:, :self.num_proprio],
                                              self.base_lin_vel * self.obs_scales.lin_vel,), dim=-1)
 
@@ -340,6 +337,34 @@ class BioLeggedRobot(LeggedRobot):
         self.w_prime_bal[env_ids] = self.cfg.metabolic.w_prime_total
         # 记录上一时刻的力矩用于计算功率变化率
         self.last_torques[env_ids] = torch.zeros_like(self.torques[env_ids])
+
+    def _get_noise_scale_vec(self, cfg):
+        """ Sets a vector used to scale the noise added to the observations.
+            [NOTE]: Must be adapted when changing the observations structure
+
+        Args:
+            cfg (Dict): Environment config file
+
+        Returns:
+            [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
+        """
+        noise_vec = torch.zeros_like(self.obs_buf[0])
+        self.add_noise = self.cfg.noise.add_noise
+        noise_scales = self.cfg.noise.noise_scales
+        noise_level = self.cfg.noise.noise_level
+
+        noise_vec[0:3] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
+        noise_vec[3:6] = noise_scales.gravity * noise_level
+        noise_vec[6:9] = 0. # commands
+        noise_vec[9:21] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
+        noise_vec[21:33] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[33:45] = 0. # previous actions
+        noise_vec[45:57] = 0. # muscle
+        noise_vec[57:58] = 0. # energy
+        noise_vec[58:61] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
+        if self.cfg.terrain.measure_heights:
+            noise_vec[61:248] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
+        return noise_vec
 
     def _reward_penalty_3cc_max(self):
         fatigue = self.muscle_states[..., 2]  # (num_envs, num_dofs)

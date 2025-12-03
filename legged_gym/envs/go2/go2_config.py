@@ -200,6 +200,8 @@ class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
 
     class runner( LeggedRobotCfgPPO.runner ):
+        policy_class_name = 'LPActorCritic'
+        algorithm_class_name = 'LPPPO'
         run_name = 'rough'
         experiment_name = 'rough_Go2'
         max_iterations = 1500
@@ -215,7 +217,7 @@ class BioGo2RoughCfgPPO( Go2RoughCfgPPO ):
         algorithm_class_name = 'LPPPO'
         run_name = 'rough'
         experiment_name = 'rough_Go2_bio'
-        max_iterations = 1500
+        max_iterations = 15000
         # # load and resume, has load problem if not use resume
         # resume = True
         # load_run = 'Nov27_23-08-09_rough/' # -1 = last run

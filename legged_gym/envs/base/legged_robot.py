@@ -239,11 +239,10 @@ class LeggedRobot(BaseTask):
                                  self.actions,
                                  ), dim=-1)
 
-        # add perceptive inputs if not blind
-        current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel), dim=-1)
-
-        self.privileged_obs_buf = torch.cat((current_obs[:, :self.num_proprio],
+        current_pri_obs = torch.cat((current_obs[:, :self.num_proprio],
                                              self.base_lin_vel * self.obs_scales.lin_vel,), dim=-1)
+
+        self.num_privileged_obs = current_pri_obs # torch.cat((current_pri_obs, self.num_privileged_obs[:, :-self.num_proprio+3]),dim=-1)
 
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
