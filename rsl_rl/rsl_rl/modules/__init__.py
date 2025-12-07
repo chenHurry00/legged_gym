@@ -31,4 +31,5 @@
 from .actor_critic import ActorCritic
 from .actor_critic_recurrent import ActorCriticRecurrent
 from .latent_pri_actor_critic import LPActorCritic
+from .rnn_attention_actor_critic import RNNAttentionActorCriticRecurrent
 from .utility.common_modules import get_activation,StateHistoryEncoder
