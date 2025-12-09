@@ -186,7 +186,11 @@ def export_policy_as_jit(actor_critic, path):
         exporter = PolicyExporterLP(actor_critic)
         path = os.path.join(path, 'policy_1.pt')
         exporter.export(path)
-    else: 
+    elif hasattr(actor_critic, 'actor_history_encoder'):
+        # ParallelAttentionActorCritic
+        exporter = PolicyExporterParallelAttention(actor_critic)
+        exporter.export(path)
+    else:
         os.makedirs(path, exist_ok=True)
         path = os.path.join(path, 'policy_1.pt')
         model = copy.deepcopy(actor_critic.actor).to('cpu')
@@ -389,3 +393,55 @@ class PolicyExporterLP(torch.nn.Module):
 
         except Exception as e:
             print(f"✗ Verification failed: {e}")
+
+
+class PolicyExporterParallelAttention(torch.nn.Module):
+    """ParallelAttentionActorCritic 专用导出器"""
+
+    def __init__(self, actor_critic):
+        super().__init__()
+        # 保存模型参数用于创建正确的示例输入
+        self.num_proprio = actor_critic.num_proprio
+        self.num_frames = actor_critic.num_frames
+
+        # 深拷贝必要的组件
+        self.history_encoder = copy.deepcopy(actor_critic.actor_history_encoder)
+        self.actor = copy.deepcopy(actor_critic.actor)
+
+        # 归一化器（如果存在）
+        if hasattr(actor_critic, 'prop_input_norm'):
+            self.prop_input_norm = copy.deepcopy(actor_critic.prop_input_norm)
+        else:
+            self.prop_input_norm = None
+
+        # 移动到CPU
+        self.cpu()
+
+    def forward(self, observations):
+        # 使用历史编码器处理观测序列
+        encoded = self.history_encoder(observations, causal_mask=False, update_norm=False)
+
+        # 提取当前观测（第一个时间步）
+        prop = observations[:, :self.num_proprio]
+
+        # 归一化当前观测（如果需要）
+        if self.prop_input_norm is not None:
+            prop = self.prop_input_norm(prop)
+
+        # 拼接编码特征和当前观测
+        actor_input = torch.cat((prop, encoded), dim=1)
+
+        # 输出动作
+        actions = self.actor(actor_input)
+        return actions
+
+    def export(self, path):
+        os.makedirs(path, exist_ok=True)
+        path = os.path.join(path, 'policy_parallel_attention.pt')
+        self.to('cpu')
+        # 使用 trace 而不是 script 来避免类型注解问题
+        # 创建与模型实际参数匹配的示例输入
+        example_input = torch.randn(1, self.num_proprio * self.num_frames)
+        traced_script_module = torch.jit.trace(self, example_input)
+        traced_script_module.save(path)
+        print(f"✓ Exported Parallel Attention policy to {path}")
