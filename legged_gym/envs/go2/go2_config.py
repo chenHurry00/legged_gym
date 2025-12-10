@@ -205,16 +205,17 @@ class Go2RoughCfgPPO(LeggedRobotCfgPPO):
         # actor_hidden_dims = [128, 64, 32]
         # critic_hidden_dims = [128, 64, 32]
         activation = 'elu'  # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
-
-    class runner( LeggedRobotCfgPPO.runner ):
-        policy_class_name = 'LPActorCritic'
-        algorithm_class_name = 'LPPPO'
+ 
+    class runner(LeggedRobotCfgPPO.runner):
+        policy_class_name = 'ParallelAttentionActorCritic'  # ParallelAttentionActorCritic
+        algorithm_class_name = 'PPO'
         run_name = 'rough'
-        experiment_name = 'rough_Go2'
-        max_iterations = 1500
+        experiment_name = 'rough_Go2_ATT'  # rough_Go2_ATT
+        # num_steps_per_env = 50 # per iteration
+        max_iterations = 20000  # number of policy updates
         # # load and resume, has load problem if not use resume
-        # resume = True
-        # load_run = 'Oct23_11-18-21_rough/' # -1 = last run
+        resume = False
+        # load_run = 'Dec08_18-34-43_rough' # -1 = last run
         # checkpoint = 500 # -1 = last saved model
         # resume_path = '{LEGGED_GYM_ROOT_DIR}/logs/rough_cyberdog2/' # updated from load_run and chkpt
 
@@ -299,4 +300,3 @@ class Go2MeihuaCfgPPO(Go2RoughCfgPPO):
         run_name = 'meihua'
         experiment_name = 'rough_Go2'
         max_iterations = 1500
-

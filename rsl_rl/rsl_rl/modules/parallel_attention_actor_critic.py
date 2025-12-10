@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
-import numpy as np
+import math
+
 import torch
 import torch.nn as nn
 from torch.distributions import Normal
-import math
 
 
 class RunningMeanStd(nn.Module):
@@ -271,7 +271,7 @@ class ParallelAttentionActorCritic(nn.Module):
                  num_layers=2,
                  actor_hidden_dims=[256, 128],  # 减少参数
                  critic_hidden_dims=[256, 128],
-                 scan_hidden_dims = [256, 128],
+                 scan_hidden_dims=[256, 128],
                  activation='elu',
                  dropout=0.0,  # 初期不用dropout
                  init_noise_std=1.0,
@@ -444,7 +444,7 @@ class ParallelAttentionActorCritic(nn.Module):
             )
 
         prop_vel = critic_observations[:, :-self.num_scans]
-        scan = critic_observations[:, self.num_proprio+3:]
+        scan = critic_observations[:, self.num_proprio + 3:]
 
         scan_hidden_layer = self.scan_layer(scan)
 
