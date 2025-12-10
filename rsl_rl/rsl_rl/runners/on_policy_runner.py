@@ -37,6 +37,8 @@ from collections import deque
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+from rsl_rl.modules import ActorCritic, ActorCriticRecurrent, LPActorCritic, RNNAttentionActorCriticRecurrent, \
+    ParallelAttentionActorCritic
 from rsl_rl.algorithms import PPO
 from rsl_rl.env import VecEnv
 
@@ -60,11 +62,30 @@ class OnPolicyRunner:
             num_critic_obs = self.env.num_obs
         actor_critic_class = eval(self.cfg["policy_class_name"])  # ActorCritic
         ### PPO ###
-        actor_critic = actor_critic_class( self.env.num_obs,
-                                           num_critic_obs,
-                                           self.env.num_actions,
-                                           **self.policy_cfg).to(self.device)
-        alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
+
+        # 检查actor_critic_class的__init__方法支持的参数
+        init_signature = inspect.signature(actor_critic_class.__init__)
+        supported_params = set(init_signature.parameters.keys())
+
+        # 构建基础参数字典
+        actor_critic_kwargs = {
+            'num_actor_obs': self.env.num_obs,
+            'num_critic_obs': num_critic_obs,
+            'num_actions': self.env.num_actions,
+        }
+
+        # 只添加网络类支持的额外参数
+        if 'num_proprio' in supported_params:
+            actor_critic_kwargs['num_proprio'] = self.env.num_proprio
+        elif 'num_scan' in supported_params:  # 兼容不同的参数名
+            actor_critic_kwargs['num_scan'] = self.env.num_scan
+
+        # 添加配置参数
+        actor_critic_kwargs.update(self.policy_cfg)
+
+        # 创建actor_critic实例
+        actor_critic = actor_critic_class(**actor_critic_kwargs).to(self.device)
+        alg_class = eval(self.cfg["algorithm_class_name"])  # PPO
         self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
         ### LPPPO ###
         # actor_critic: LPActorCritic = actor_critic_class(num_actions=self.env.num_actions,
