@@ -120,6 +120,14 @@ class LeggedRobot(BaseTask):
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
 
+        self.feet_pos = self.rigid_body_states[:, self.feet_indices, 0:3]
+        self.feet_vel = self.rigid_body_states[:, self.feet_indices, 7:10]
+
+        # self.roll, self.pitch, self.yaw = euler_from_quaternion(self.base_quat)
+        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
+        self.contact_filt = torch.logical_or(contact, self.last_contacts)
+        self.last_contacts = contact
+
         self._post_physics_step_callback()
 
         # compute observations, rewards, resets, ...
@@ -251,6 +259,8 @@ class LeggedRobot(BaseTask):
         # update obs history
         self.obs_buf = torch.cat((current_obs[:, :self.num_proprio], self.obs_buf[:, :-self.num_proprio]),
                                  dim=-1)
+
+        self.obs_buf = self.obs_buf[:, :self.num_obs]
 
         current_pri_obs = torch.cat((current_obs,
                                      self.base_lin_vel * self.obs_scales.lin_vel,), dim=-1)
@@ -649,7 +659,11 @@ class LeggedRobot(BaseTask):
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
         self.base_quat = self.root_states[:, 3:7]
 
-        self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3) # shape: num_envs, num_bodies, xyz axis
+        self.feet_pos = self.rigid_body_states[:, self.feet_indices, 0:3]
+        self.feet_vel = self.rigid_body_states[:, self.feet_indices, 7:10]
+
+        self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1,
+                                                                            3)  # shape: num_envs, num_bodies, xyz axis
 
         # initialize some data used later on
         self.common_step_counter = 0
@@ -1015,7 +1029,92 @@ class LeggedRobot(BaseTask):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
         return torch.square(base_height - self.cfg.rewards.base_height_target)
-    
+
+    # 惩罚拖脚
+    def _reward_foot_clearance_up(self):
+        cur_footpos_translated = self.feet_pos - self.root_states[:, 0:3].unsqueeze(1)
+        footpos_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        cur_footvel_translated = self.feet_vel - self.root_states[:, 7:10].unsqueeze(1)
+        footvel_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        for i in range(len(self.feet_indices)):
+            footpos_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footpos_translated[:, i, :])
+            footvel_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footvel_translated[:, i, :])
+
+        height_error = torch.square(footpos_in_body_frame[:, :, 2] - self.cfg.rewards.clearance_height_target).view(
+            self.num_envs, -1)
+        foot_leteral_vel = torch.sqrt(torch.sum(torch.square(footvel_in_body_frame[:, :, :2]), dim=2)).view(
+            self.num_envs, -1)
+        # no_contact = 1.*(self.contact_filt == 0)
+
+        clearance_reward = height_error * foot_leteral_vel
+
+        return torch.sum(clearance_reward, dim=1) * torch.clamp(-self.projected_gravity[:, 2], 0, 1)
+
+    # 惩罚滑步
+    def _reward_foot_slide_up(self):
+        cur_footvel_translated = self.feet_vel - self.root_states[:, 7:10].unsqueeze(1)
+        footvel_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        for i in range(len(self.feet_indices)):
+            footvel_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footvel_translated[:, i, :])
+        foot_leteral_vel = torch.sqrt(torch.sum(torch.square(footvel_in_body_frame[:, :, :2]), dim=2)).view(
+            self.num_envs, -1)
+
+        cost_slide = torch.sum(self.contact_filt * foot_leteral_vel, dim=1) * torch.clamp(-self.projected_gravity[:, 2],
+                                                                                          0, 1)
+        return cost_slide
+
+    # 惩罚足部撞台阶
+    def _reward_stumble_up(self):
+        # Penalize feet hitting vertical surfaces
+        return torch.clamp(-self.projected_gravity[:, 2], 0, 1) * (
+            torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >
+                      5 * torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1))
+
+    # 惩罚前后横向足距差别
+    def _reward_foot_width_equlity(self):
+        cur_footpos_translated = self.feet_pos - self.root_states[:, 0:3].unsqueeze(1)
+        footpos_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        for i in range(len(self.feet_indices)):
+            footpos_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footpos_translated[:, i, :])
+
+        width_1 = torch.abs(footpos_in_body_frame[:, 0, 1] - footpos_in_body_frame[:, 1, 1])
+        width_2 = torch.abs(footpos_in_body_frame[:, 2, 1] - footpos_in_body_frame[:, 3, 1])
+
+        return 1. * (torch.abs(self.commands[:, 1]) == 0) * torch.square(width_1 - width_2)
+
+    def _reward_foot_dia_enforce(self):
+        cur_footpos_translated = self.feet_pos - self.root_states[:, 0:3].unsqueeze(1)
+        footpos_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        for i in range(len(self.feet_indices)):
+            footpos_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footpos_translated[:, i, :])
+
+        dia_1 = torch.sqrt(
+            torch.sum(torch.square(footpos_in_body_frame[:, 0, :] - footpos_in_body_frame[:, 2, :]), dim=-1))
+        dia_2 = torch.sqrt(
+            torch.sum(torch.square(footpos_in_body_frame[:, 1, :] - footpos_in_body_frame[:, 3, :]), dim=-1))
+
+        return (torch.square(dia_1 - 0.51) + torch.square(dia_2 - 0.51)) / 2
+
+    def _reward_foot_width_cons(self):
+        cur_footpos_translated = self.feet_pos - self.root_states[:, 0:3].unsqueeze(1)
+        footpos_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        for i in range(len(self.feet_indices)):
+            footpos_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footpos_translated[:, i, :])
+
+        width_1 = torch.abs(footpos_in_body_frame[:, 0, 1] - footpos_in_body_frame[:, 1, 1])
+        width_2 = torch.abs(footpos_in_body_frame[:, 2, 1] - footpos_in_body_frame[:, 3, 1])
+
+        return (torch.square(width_1 - 0.3) + torch.square(width_2 - 0.3)) / 2.
+
+    def _reward_foot_mirror_up(self):
+        diff1 = torch.sum(torch.square(self.dof_pos[:, [0, 1, 2]] - self.dof_pos[:, [9, 10, 11]]), dim=-1)
+        diff2 = torch.sum(torch.square(self.dof_pos[:, [3, 4, 5]] - self.dof_pos[:, [6, 7, 8]]), dim=-1)
+        return 0.5 * torch.clamp(-self.projected_gravity[:, 2], 0, 1) * (diff1 + diff2)
+
+    def _reward_stand_nice(self):
+        return (torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) *
+                (1 - self.projected_gravity[:, 2]) * (torch.norm(self.commands[:, :2], dim=1) < 0.1))
+
     def _reward_torques(self):
         # Penalize torques
         return torch.sum(torch.square(self.torques), dim=1)
